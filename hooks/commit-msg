@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# hooks/commit-msg
+#
+# Validates that commit messages follow the Conventional Commits specification:
+# https://www.conventionalcommits.org/en/v1.0.0/
+#
+# Format:
+#   <type>[optional scope][optional !]: <description>
+#   [optional body]
+#   [optional footer(s)]
+#
+# Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+#
+# Examples:
+#   feat: add login endpoint
+#   fix(auth): handle expired tokens
+#   feat!: drop support for Node 12
+#   chore(deps): bump lodash to 4.17.21
+#
+# To skip (not recommended):  git commit --no-verify
+# ==============================================================================
+
+set -euo pipefail
+
+# ── Colour helpers ────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+pass()  { echo -e "${GREEN}[commit-msg]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[commit-msg]${NC} $*"; }
+fail()  { echo -e "${RED}[commit-msg] FAIL${NC} $*"; }
+
+COMMIT_MSG_FILE="${1}"
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# ── Strip comments and blank leading/trailing lines ──────────────────────────
+# (git automatically strips comments, but we do it here for the regex match)
+CLEANED_MSG=$(echo "$COMMIT_MSG" | sed '/^#/d' | sed '/^$/d' | head -1)
+
+if [[ -z "$CLEANED_MSG" ]]; then
+    fail "Commit message is empty."
+    exit 1
+fi
+
+# ── Conventional Commits pattern ─────────────────────────────────────────────
+# type(scope)!: description
+CONVENTIONAL_PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9_/-]+\))?(!)?: .{1,72}$'
+
+FAILED=0
+
+# ── Check 1: Conventional Commits format ─────────────────────────────────────
+if ! echo "$CLEANED_MSG" | grep -qP "$CONVENTIONAL_PATTERN"; then
+    fail "Commit message does not follow Conventional Commits format."
+    echo ""
+    echo "  Expected: <type>[optional scope][optional !]: <description>"
+    echo ""
+    echo "  Valid types:"
+    echo "    feat      — a new feature"
+    echo "    fix       — a bug fix"
+    echo "    docs      — documentation only changes"
+    echo "    style     — formatting, whitespace (no logic change)"
+    echo "    refactor  — code change that neither fixes a bug nor adds a feature"
+    echo "    perf      — performance improvement"
+    echo "    test      — adding or correcting tests"
+    echo "    build     — changes to build system or dependencies"
+    echo "    ci        — changes to CI configuration"
+    echo "    chore     — miscellaneous maintenance tasks"
+    echo "    revert    — reverts a previous commit"
+    echo ""
+    echo "  Examples:"
+    echo "    feat: add login endpoint"
+    echo "    fix(auth): handle expired tokens"
+    echo "    feat!: drop support for Node 12"
+    echo "    chore(deps): bump lodash to 4.17.21"
+    echo ""
+    echo "  Your message was:"
+    echo "    $CLEANED_MSG"
+    echo ""
+    FAILED=1
+fi
+
+# ── Check 2: Subject line length (max 72 chars) ───────────────────────────────
+SUBJECT_LENGTH=${#CLEANED_MSG}
+if (( SUBJECT_LENGTH > 72 )); then
+    fail "Subject line is too long (${SUBJECT_LENGTH} chars). Maximum is 72."
+    warn "  Tip: move details into the commit body (leave a blank line after the subject)."
+    FAILED=1
+fi
+
+# ── Check 3: Subject must not end with a period ───────────────────────────────
+if echo "$CLEANED_MSG" | grep -qP '\.$'; then
+    fail "Subject line must not end with a period."
+    FAILED=1
+fi
+
+# ── Check 4: Subject description must not be blank ───────────────────────────
+if echo "$CLEANED_MSG" | grep -qP '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9_/-]+\))?(!)?: *$'; then
+    fail "Subject description is empty — add a brief description after the colon."
+    FAILED=1
+fi
+
+# ── Check 5: Body line length (max 100 chars) ─────────────────────────────────
+body=$(echo "$COMMIT_MSG" | sed '/^#/d' | tail -n +2)
+while IFS= read -r line; do
+    if (( ${#line} > 100 )); then
+        warn "Body line exceeds 100 chars: '$line'"
+    fi
+done <<< "$body"
+
+# ── Result ────────────────────────────────────────────────────────────────────
+if (( FAILED )); then
+    exit 1
+fi
+
+pass "Commit message looks good."
+exit 0

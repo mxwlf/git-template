@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# hooks/pre-push
+#
+# Runs checks before pushing commits to a remote.
+# Aborts the push (exit 1) if any check fails.
+#
+# Checks performed:
+#   1. Block direct pushes to protected branches (main, master, develop, release/*)
+#   2. Ensure working tree is clean (no uncommitted changes)
+#   3. Run the project's test suite if a test command is detected
+#   4. Run optional security audit (npm audit / pip-audit / bundle-audit)
+# ==============================================================================
+
+set -euo pipefail
+
+# ── Colour helpers ────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+pass()  { echo -e "${GREEN}[pre-push]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[pre-push]${NC} $*"; }
+fail()  { echo -e "${RED}[pre-push] FAIL${NC} $*"; }
+
+REMOTE="$1"
+# $2 is the remote URL (unused but available)
+
+FAILED=0
+
+# ── Read pushed refs from stdin ───────────────────────────────────────────────
+# Each line: <local_ref> <local_sha> <remote_ref> <remote_sha>
+while IFS=' ' read -r local_ref local_sha remote_ref _remote_sha; do
+
+    # Skip deletions
+    [[ "$local_sha" == "0000000000000000000000000000000000000000" ]] && continue
+
+    # ── 1. Block force pushes / direct pushes to protected branches ───────────
+    branch="${remote_ref#refs/heads/}"
+    PROTECTED_BRANCHES=${PROTECTED_BRANCHES:-"main master develop"}
+    for protected in $PROTECTED_BRANCHES; do
+        if [[ "$branch" == "$protected" ]]; then
+            fail "Direct push to protected branch '$branch' is not allowed."
+            fail "  Open a pull request instead."
+            fail "  To override (not recommended): git push --no-verify"
+            FAILED=1
+        fi
+    done
+
+    # Also block release/* and hotfix/* branches by pattern
+    if [[ "$branch" =~ ^(release|hotfix)/ ]]; then
+        warn "Pushing to '$branch' — make sure this is intentional."
+    fi
+
+done
+
+# ── 2. Uncommitted changes check ─────────────────────────────────────────────
+echo ""
+echo "Checking for uncommitted changes …"
+if ! git diff --quiet || ! git diff --cached --quiet; then
+    fail "You have uncommitted changes. Commit or stash them before pushing."
+    FAILED=1
+fi
+
+# ── 3. Run tests if a test command exists ────────────────────────────────────
+echo "Looking for test runner …"
+
+run_tests() {
+    local cmd="$1"
+    echo "Running: $cmd"
+    if ! eval "$cmd"; then
+        fail "Tests failed — push aborted."
+        FAILED=1
+    else
+        pass "Tests passed."
+    fi
+}
+
+if [[ -f "package.json" ]] && command -v node &>/dev/null; then
+    # Check whether a "test" script is defined and non-trivially populated
+    has_test_script() {
+        local test_cmd
+        test_cmd=$(node -e "const p=require('./package.json'); console.log((p.scripts||{}).test||'')" 2>/dev/null)
+        [[ -n "$test_cmd" && "$test_cmd" != 'echo "Error: no test specified" && exit 1' ]]
+    }
+    if has_test_script; then
+        run_tests "npm test --silent"
+    else
+        warn "No test script found in package.json — skipping."
+    fi
+elif [[ -f "Makefile" ]] && grep -q '^test:' Makefile 2>/dev/null; then
+    run_tests "make test"
+elif [[ -f "pyproject.toml" || -f "setup.py" || -f "setup.cfg" ]]; then
+    if command -v pytest &>/dev/null; then
+        run_tests "pytest -q"
+    elif command -v python &>/dev/null; then
+        run_tests "python -m pytest -q"
+    fi
+elif [[ -f "Cargo.toml" ]] && command -v cargo &>/dev/null; then
+    run_tests "cargo test --quiet"
+elif [[ -f "go.mod" ]] && command -v go &>/dev/null; then
+    run_tests "go test ./..."
+elif [[ -f "Gemfile" ]] && command -v bundle &>/dev/null; then
+    if bundle exec rake --tasks 2>/dev/null | grep -q '^rake test'; then
+        run_tests "bundle exec rake test"
+    elif command -v rspec &>/dev/null || bundle list 2>/dev/null | grep -q rspec; then
+        run_tests "bundle exec rspec --format progress"
+    else
+        warn "No rake test task or rspec found — skipping."
+    fi
+else
+    warn "No recognized test runner found — skipping test step."
+fi
+
+# ── 4. Security audit (optional) ─────────────────────────────────────────────
+RUN_AUDIT=${RUN_AUDIT:-1}
+if [[ "$RUN_AUDIT" == "1" ]]; then
+    echo "Running security audit …"
+    if [[ -f "package.json" ]] && command -v npm &>/dev/null; then
+        if ! npm audit --audit-level=high --omit=dev 2>&1; then
+            fail "npm audit found high-severity vulnerabilities."
+            fail "  Run 'npm audit fix' or 'npm audit' for details."
+            FAILED=1
+        fi
+    fi
+
+    if [[ -f "requirements.txt" || -f "pyproject.toml" ]] && command -v pip-audit &>/dev/null; then
+        if ! pip-audit -q 2>&1; then
+            fail "pip-audit found vulnerabilities."
+            FAILED=1
+        fi
+    fi
+
+    if [[ -f "Gemfile.lock" ]] && command -v bundle-audit &>/dev/null; then
+        if ! bundle-audit check --update 2>&1; then
+            fail "bundle-audit found vulnerabilities."
+            FAILED=1
+        fi
+    fi
+fi
+
+# ── Result ────────────────────────────────────────────────────────────────────
+echo ""
+if (( FAILED )); then
+    fail "One or more pre-push checks failed. Fix the issues above and try again."
+    fail "To skip all hooks (not recommended): git push --no-verify"
+    exit 1
+fi
+
+pass "All pre-push checks passed. Pushing to '$REMOTE' …"
+exit 0

@@ -1,0 +1,272 @@
+# ==============================================================================
+# git-config — Recommended Git Configuration
+#
+# Usage — include this file in your global or local git config:
+#
+#   git config --global include.path /path/to/this/git-config
+#
+# Or copy the relevant sections into ~/.gitconfig or .git/config.
+# ==============================================================================
+
+[core]
+    # Normalize line endings to LF in the repository; let .gitattributes
+    # control per-file behaviour (text=auto eol=lf).
+    autocrlf = input
+
+    # Warn when a file has mixed line endings.
+    safecrlf = warn
+
+    # Handle long file paths on Windows.
+    longpaths = true
+
+    # Use a pager for all output that may exceed one screen.
+    pager = less -FRX
+
+    # Detect file-system changes more reliably.
+    trustctime = false
+
+    # Prevent issues with Unicode filenames on macOS HFS+.
+    precomposeunicode = true
+
+    # Use the system editor; override with VISUAL or EDITOR env vars.
+    # editor = vim
+
+    # Avoid accidental commits of files with whitespace errors.
+    whitespace = fix
+
+[init]
+    # Use "main" as the default branch name for new repositories.
+    defaultBranch = main
+
+[pull]
+    # Refuse to pull if it would create a merge commit; use rebase instead.
+    rebase = true
+
+[rebase]
+    # Automatically stash/unstash local changes when rebasing.
+    autostash = true
+
+    # Abbreviate commit hashes in the rebase todo list.
+    abbreviateCommands = true
+
+[fetch]
+    # Remove remote-tracking branches that no longer exist on the remote.
+    prune = true
+
+    # Remove remote-tracking tags that no longer exist on the remote.
+    pruneTags = true
+
+    # Fetch all remotes in parallel.
+    parallel = 0
+
+[push]
+    # Push only the current branch to its upstream (safe default).
+    default = current
+
+    # Automatically set up tracking for new branches.
+    autoSetupRemote = true
+
+    # Push annotated tags along with commits.
+    followTags = true
+
+[merge]
+    # Show the common ancestor ("base") in conflict markers — easier to resolve.
+    conflictstyle = zdiff3
+
+    # Summarize the merged-in commits in merge commit messages.
+    log = true
+
+    # Always create a merge commit (no fast-forward) for feature merges.
+    # ff = false   # uncomment if you want explicit merge commits
+
+[diff]
+    # Detect renames and copies, not just additions/deletions.
+    renames = copies
+
+    # Use the histogram diff algorithm (better for code).
+    algorithm = histogram
+
+    # Show moved blocks in a different colour.
+    colorMoved = default
+
+    # Detect indentation changes separately from moved blocks.
+    colorMovedWS = ignore-all-space
+
+    # Use the index as the "a/" side for unstaged diffs.
+    mnemonicprefix = true
+
+    # Show sub-module changes in diffs.
+    submodule = log
+
+[log]
+    # Abbreviate commit hashes in log output.
+    abbrevCommit = true
+
+    # Follow renames in log --follow.
+    follow = true
+
+    # Use ISO 8601-like date format.
+    date = iso
+
+[status]
+    # Show individual files inside untracked directories.
+    showUntrackedFiles = all
+
+    # Show sub-module changes in status.
+    submoduleSummary = true
+
+[branch]
+    # When branching off a remote, always set up tracking automatically.
+    autoSetupMerge = always
+
+    # Sort branches by most-recently-committed first.
+    sort = -committerdate
+
+[tag]
+    # Sort tags as version numbers (v1.10.0 > v1.9.0).
+    sort = version:refname
+
+[stash]
+    # Show the diff of the stashed changes when running `git stash show`.
+    showPatch = true
+
+[rerere]
+    # Remember how you resolved merge conflicts and reuse those resolutions.
+    enabled = true
+    autoupdate = true
+
+[help]
+    # Automatically correct and execute mistyped git commands after 1 second.
+    autocorrect = 10
+
+[color]
+    ui = auto
+
+[color "branch"]
+    current  = yellow bold
+    local    = green
+    remote   = cyan
+    upstream = red
+
+[color "diff"]
+    meta       = yellow
+    frag       = magenta bold
+    func       = 146 bold
+    commit     = yellow bold
+    old        = red bold
+    new        = green bold
+    whitespace = red reverse
+
+[color "status"]
+    added     = green bold
+    changed   = yellow bold
+    untracked = red bold
+
+# ------------------------------------------------------------------------------
+# Aliases — convenient shorthand commands
+# ------------------------------------------------------------------------------
+
+[alias]
+    # Short log with graph
+    lg     = log --graph --pretty=format:'%C(yellow)%h%Creset %C(cyan)%an%Creset %C(green)(%ar)%Creset %s%C(red)%d%Creset' --abbrev-commit
+    lga    = log --graph --pretty=format:'%C(yellow)%h%Creset %C(cyan)%an%Creset %C(green)(%ar)%Creset %s%C(red)%d%Creset' --abbrev-commit --all
+
+    # Show the last commit
+    last   = log -1 HEAD --stat
+
+    # Stage all changes and commit
+    ca     = commit --all
+
+    # Amend the last commit without changing the message
+    amend  = commit --amend --no-edit
+
+    # Show a diff of what's staged
+    staged = diff --cached
+
+    # List all aliases
+    aliases = config --get-regexp alias
+
+    # Undo the last commit, keeping changes staged
+    undo   = reset --soft HEAD~1
+
+    # Discard all local changes (DANGEROUS)
+    discard = checkout --
+
+    # List branches sorted by most recently committed
+    branches = branch --sort=-committerdate --format='%(color:yellow)%(refname:short)%(color:reset) %(color:green)(%(committerdate:relative))%(color:reset)'
+
+    # Show files changed in the last commit
+    changed = show --stat --oneline HEAD
+
+    # Interactively add changes (hunk by hunk)
+    ap     = add --patch
+
+    # Clean up merged local branches
+    cleanup = "!git branch --merged | grep -v '\\*\\|main\\|master\\|develop' | xargs -r git branch -d"
+
+    # Push the current branch and set upstream
+    pub    = "!git push --set-upstream origin $(git symbolic-ref --short HEAD)"
+
+    # Show the root of the repository
+    root   = rev-parse --show-toplevel
+
+    # Word-level diff (useful for prose)
+    wdiff  = diff --word-diff=color
+
+    # Find commits that introduced a string
+    pickaxe = log -S
+
+    # Interactive rebase on the last N commits (usage: git ri 3)
+    ri     = rebase --interactive
+
+# ------------------------------------------------------------------------------
+# Diff drivers — used in .gitattributes to improve context lines in diffs
+# ------------------------------------------------------------------------------
+
+[diff "markdown"]
+    xfuncname = "^#{1,6} .*$"
+
+[diff "python"]
+    xfuncname = "^[ \t]*(def|class) .+$"
+
+[diff "ruby"]
+    xfuncname = "^[ \t]*(def|class|module) .+$"
+
+[diff "java"]
+    xfuncname = "^[ \t]*(public|protected|private|static|abstract|final|native|synchronized).*[{;]$"
+
+[diff "cpp"]
+    xfuncname = "^(([A-Za-z_][A-Za-z_0-9]*[ \t]+)+[A-Za-z_][A-Za-z_0-9]*[ \t]*\\([^;]*)$"
+
+[diff "csharp"]
+    xfuncname = "^[ \t]*(public|protected|private|internal|static|abstract|virtual|override|async|sealed).*$"
+
+# ------------------------------------------------------------------------------
+# URL rewrites — use SSH instead of HTTPS for common hosts (optional)
+# Uncomment if you prefer SSH-based authentication.
+# ------------------------------------------------------------------------------
+
+# [url "git@github.com:"]
+#     insteadOf = https://github.com/
+
+# [url "git@gitlab.com:"]
+#     insteadOf = https://gitlab.com/
+
+# [url "git@bitbucket.org:"]
+#     insteadOf = https://bitbucket.org/
+
+# ------------------------------------------------------------------------------
+# Signing commits with GPG or SSH (optional — fill in your key ID)
+# ------------------------------------------------------------------------------
+
+# [user]
+#     signingkey = <YOUR_GPG_KEY_ID_OR_SSH_PUBLIC_KEY_FILE>
+
+# [commit]
+#     gpgsign = true
+
+# [gpg]
+#     format = ssh   # use "openpgp" for GPG
+
+# [gpg "ssh"]
+#     allowedSignersFile = ~/.config/git/allowed_signers

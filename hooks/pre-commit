@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# hooks/pre-commit
+#
+# Runs fast sanity checks before a commit is recorded.
+# Aborts the commit (exit 1) if any check fails.
+#
+# Checks performed:
+#   1. No merge-conflict markers left in staged files
+#   2. No debug / TODO-FIXME markers in staged files (configurable)
+#   3. No trailing whitespace in staged text files
+#   4. No large files accidentally staged (> 5 MB by default)
+#   5. No secrets / high-entropy strings (basic heuristic)
+#   6. Optional tool runners (prettier, eslint, black, ruff, shellcheck …)
+#      — each runner is only invoked when the tool is present on PATH.
+# ==============================================================================
+
+set -euo pipefail
+
+# ── Colour helpers ────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No colour
+
+pass()  { echo -e "${GREEN}[pre-commit]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[pre-commit]${NC} $*"; }
+fail()  { echo -e "${RED}[pre-commit] FAIL${NC} $*"; }
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+# List of staged files (relative paths, excluding deleted files)
+staged_files() {
+    git diff --cached --name-only --diff-filter=ACMR
+}
+
+# List of staged text files (skip binary files)
+staged_text_files() {
+    staged_files | while IFS= read -r f; do
+        # git check-attr returns "text: set" for text files
+        attr=$(git check-attr text -- "$f" 2>/dev/null | awk '{print $3}')
+        if [[ "$attr" != "unset" && "$attr" != "unspecified" ]]; then
+            echo "$f"
+        fi
+    done
+}
+
+FAILED=0
+
+# ── 1. Conflict markers ───────────────────────────────────────────────────────
+echo ""
+echo "Checking for conflict markers …"
+markers=('<<<<<<<' '=======' '>>>>>>>')
+while IFS= read -r file; do
+    for marker in "${markers[@]}"; do
+        if git show ":$file" 2>/dev/null | grep -qF "$marker"; then
+            fail "Conflict marker '$marker' found in: $file"
+            FAILED=1
+        fi
+    done
+done < <(staged_text_files)
+
+# ── 2. Debug / TODO-FIXME markers (optional — set to 0 to disable) ────────────
+CHECK_DEBUG_MARKERS=${CHECK_DEBUG_MARKERS:-1}
+if [[ "$CHECK_DEBUG_MARKERS" == "1" ]]; then
+    echo "Checking for debug markers …"
+    debug_patterns=('debugger;' 'console\.log(' 'binding\.pry' 'byebug' 'puts "DEBUG' 'print\('"'"'DEBUG')
+    while IFS= read -r file; do
+        for pattern in "${debug_patterns[@]}"; do
+            if git show ":$file" 2>/dev/null | grep -qP "$pattern"; then
+                warn "Debug marker '$pattern' found in: $file"
+                # Warning only — does not block commit
+            fi
+        done
+    done < <(staged_text_files)
+fi
+
+# ── 3. Trailing whitespace ────────────────────────────────────────────────────
+echo "Checking for trailing whitespace …"
+while IFS= read -r file; do
+    if git show ":$file" 2>/dev/null | grep -qP '\s+$'; then
+        fail "Trailing whitespace in: $file"
+        FAILED=1
+    fi
+done < <(staged_text_files)
+
+# ── 4. Large files ────────────────────────────────────────────────────────────
+MAX_FILE_SIZE_KB=${MAX_FILE_SIZE_KB:-5120}   # 5 MB default
+echo "Checking for large files (> ${MAX_FILE_SIZE_KB} KB) …"
+while IFS= read -r file; do
+    if [[ -f "$file" ]]; then
+        size_kb=$(du -k "$file" | cut -f1)
+        if (( size_kb > MAX_FILE_SIZE_KB )); then
+            fail "Large file staged (${size_kb} KB): $file — consider using Git LFS"
+            FAILED=1
+        fi
+    fi
+done < <(staged_files)
+
+# ── 5. Basic secrets heuristic ───────────────────────────────────────────────
+echo "Checking for potential secrets …"
+secret_patterns=(
+    "password\\s*=\\s*[\"'][^\"']{6,}"
+    "api[_-]?key\\s*=\\s*[\"'][^\"']{8,}"
+    "secret\\s*=\\s*[\"'][^\"']{8,}"
+    "token\\s*=\\s*[\"'][^\"']{8,}"
+    'AKIA[0-9A-Z]{16}'                   # AWS Access Key ID
+    'sk-[A-Za-z0-9]{32,}'               # OpenAI-style key
+    'ghp_[A-Za-z0-9]{36}'              # GitHub personal token (classic)
+    'ghs_[A-Za-z0-9]{36}'              # GitHub Actions token
+)
+while IFS= read -r file; do
+    for pattern in "${secret_patterns[@]}"; do
+        if git show ":$file" 2>/dev/null | grep -qiP "$pattern"; then
+            fail "Potential secret ('$pattern') in: $file"
+            fail "  If this is a false positive, use 'git commit --no-verify' to skip."
+            FAILED=1
+        fi
+    done
+done < <(staged_text_files)
+
+# ── 6. Optional tool runners ─────────────────────────────────────────────────
+
+# Prettier (JS/TS/CSS/HTML/JSON/YAML/Markdown)
+if command -v prettier &>/dev/null; then
+    echo "Running prettier …"
+    js_files=$(staged_files | grep -E '\.(js|jsx|ts|tsx|css|scss|html|json|yaml|yml|md)$' || true)
+    if [[ -n "$js_files" ]]; then
+        if ! echo "$js_files" | xargs prettier --check --loglevel warn 2>&1; then
+            fail "Prettier found formatting issues — run 'prettier --write' to fix"
+            FAILED=1
+        fi
+    fi
+fi
+
+# ESLint (JS/TS)
+if command -v eslint &>/dev/null; then
+    echo "Running eslint …"
+    js_files=$(staged_files | grep -E '\.(js|jsx|ts|tsx)$' || true)
+    if [[ -n "$js_files" ]]; then
+        if ! echo "$js_files" | xargs eslint --max-warnings 0 2>&1; then
+            fail "ESLint found issues"
+            FAILED=1
+        fi
+    fi
+fi
+
+# Black / Ruff (Python)
+if command -v black &>/dev/null; then
+    echo "Running black …"
+    py_files=$(staged_files | grep '\.py$' || true)
+    if [[ -n "$py_files" ]]; then
+        if ! echo "$py_files" | xargs black --check --quiet 2>&1; then
+            fail "Black found formatting issues — run 'black .' to fix"
+            FAILED=1
+        fi
+    fi
+fi
+
+if command -v ruff &>/dev/null; then
+    echo "Running ruff …"
+    py_files=$(staged_files | grep '\.py$' || true)
+    if [[ -n "$py_files" ]]; then
+        if ! echo "$py_files" | xargs ruff check 2>&1; then
+            fail "Ruff found lint issues"
+            FAILED=1
+        fi
+    fi
+fi
+
+# ShellCheck (shell scripts)
+if command -v shellcheck &>/dev/null; then
+    echo "Running shellcheck …"
+    sh_files=$(staged_files | grep -E '\.(sh|bash)$' || true)
+    if [[ -n "$sh_files" ]]; then
+        if ! echo "$sh_files" | xargs shellcheck 2>&1; then
+            fail "ShellCheck found issues"
+            FAILED=1
+        fi
+    fi
+fi
+
+# golangci-lint (Go)
+if command -v golangci-lint &>/dev/null && staged_files | grep -q '\.go$'; then
+    echo "Running golangci-lint …"
+    if ! golangci-lint run --fast 2>&1; then
+        fail "golangci-lint found issues"
+        FAILED=1
+    fi
+fi
+
+# ── Result ────────────────────────────────────────────────────────────────────
+echo ""
+if (( FAILED )); then
+    fail "One or more pre-commit checks failed. Fix the issues above and try again."
+    fail "To skip all hooks (not recommended): git commit --no-verify"
+    exit 1
+fi
+
+pass "All pre-commit checks passed."
+exit 0

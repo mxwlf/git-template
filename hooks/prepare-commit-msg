@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# hooks/prepare-commit-msg
+#
+# Pre-populates the commit message editor with a template that matches the
+# Conventional Commits format to guide the author.
+#
+# This hook runs AFTER the commit message file is created but BEFORE the editor
+# is opened (or immediately for non-interactive commits).
+#
+# It is skipped when:
+#   - The commit already has a message (--message / -m flag was used)
+#   - The commit is a merge commit
+#   - The commit is a squash commit
+#   - The commit is a fixup! commit
+# ==============================================================================
+
+set -euo pipefail
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="${2:-}"  # message | template | merge | squash | commit | ""
+
+# Skip when a message is already supplied (--message / -m), merge, or squash
+case "$COMMIT_SOURCE" in
+    message|merge|squash) exit 0 ;;
+esac
+
+# Skip if the file already has non-comment, non-blank content
+existing=$(grep -v '^#' "$COMMIT_MSG_FILE" | tr -d '[:space:]')
+if [[ -n "$existing" ]]; then
+    exit 0
+fi
+
+# Detect current branch name for context
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+
+# Build a helpful prefix hint from the branch name when possible.
+# Supports patterns like: feat/login-page, fix/GH-123-null-pointer, etc.
+branch_hint=""
+if [[ "$branch" =~ ^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/ ]]; then
+    type="${BASH_REMATCH[1]}"
+    branch_hint="${type}: "
+fi
+
+# Write the template, preserving any existing git-generated comments
+{
+    # Only print a hint line when the branch prefix was recognised; otherwise
+    # leave the subject blank so the user types it (an empty subject would fail
+    # the commit-msg validation hook).
+    if [[ -n "$branch_hint" ]]; then
+        printf '%s\n' "${branch_hint}"
+    else
+        printf '\n'
+    fi
+    printf '\n'
+    printf '# Conventional Commits format:\n'
+    printf '#   <type>[optional scope][optional !]: <description>\n'
+    printf '#\n'
+    printf '#   type: feat | fix | docs | style | refactor | perf |\n'
+    printf '#         test | build | ci | chore | revert\n'
+    printf '#   scope: optional — the area affected (auth, api, ui, deps …)\n'
+    printf '#   !: indicates a BREAKING CHANGE\n'
+    printf '#\n'
+    printf '# Examples:\n'
+    printf '#   feat: add user profile page\n'
+    printf '#   fix(auth): handle expired JWT tokens\n'
+    printf '#   feat!: drop support for Node 12\n'
+    printf '#   docs(readme): update installation instructions\n'
+    printf '#\n'
+    printf '# Subject line: imperative mood, ≤72 chars, no trailing period.\n'
+    printf '# Body (optional): leave a blank line after the subject, then explain WHY.\n'
+    printf '# Footer (optional): reference issues, breaking-change notices.\n'
+    printf '#   Refs: #123\n'
+    printf '#   BREAKING CHANGE: <description>\n'
+    printf '#\n'
+    # Append any comments git already put into the file (e.g. branch/status info)
+    grep '^#' "$COMMIT_MSG_FILE" || true
+} > "${COMMIT_MSG_FILE}.tmp"
+
+mv "${COMMIT_MSG_FILE}.tmp" "$COMMIT_MSG_FILE"
