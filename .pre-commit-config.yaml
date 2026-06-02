@@ -25,3 +25,4 @@ repos:
     hooks:
      -  id: commitizen
         stages: [commit-msg]
+        language_version: python3.10
