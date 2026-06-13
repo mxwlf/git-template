@@ -72,8 +72,10 @@ Run `make help` (or just `make`) to list the available targets.
 ### Hooks included
 
 - **pre-commit-hooks**: trailing whitespace, end-of-file fixer, YAML checks,
-  illegal Windows names, merge-conflict markers, private-key detection,
-  byte-order-marker fix, mixed line endings.
+  large-file guard (blocks files over 500 kB by default), case-conflict
+  detection (catches filename collisions on case-insensitive filesystems like
+  macOS/Windows), illegal Windows names, merge-conflict markers, private-key
+  detection, byte-order-marker fix, mixed line endings.
 - **gitleaks**: scans for hardcoded secrets.
 - **commitizen** (`commit-msg` stage): validates commit messages follow the
   Conventional Commits format, e.g.:
