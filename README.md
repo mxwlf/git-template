@@ -86,12 +86,89 @@ Run `make help` (or just `make`) to list the available targets.
   ```
 - **sync-pre-commit-deps**: keeps hook dependency versions in sync.
 
+## CI/CD integration
+
+This template is designed so that wiring it into **any** CI/CD platform is
+simple and deterministic. It follows the industry-standard *thin wrapper*
+pattern (see [Martin Fowler on Continuous
+Integration](https://martinfowler.com/articles/continuousIntegration.html#AutomateTheBuild)):
+all the actual check logic lives **in the repository** behind a single command,
+and each CI platform's config does nothing more than check out the code,
+install prerequisites, and run that one command.
+
+```
+make ci                       ← single source of truth (runs locally too)
+  └── pre-commit run --all-files
+        └── hooks in .pre-commit-config.yaml
+
+.github/workflows/ci.yml      ← thin stub: checkout → setup → `make ci`
+azure-pipelines.yml           ← thin stub: checkout → setup → `make ci`
+```
+
+The same `make ci` a developer runs on their laptop is exactly what runs on
+GitHub Actions and Azure DevOps. To change *what* CI does, edit the
+[`Makefile`](Makefile) and [`.pre-commit-config.yaml`](.pre-commit-config.yaml)
+— **not** the platform YAML.
+
+| File | Purpose |
+| --- | --- |
+| [`Makefile`](Makefile) (`make ci`) | The portable entrypoint. All check logic lives here. Extend it with your project's build/test commands. |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Thin GitHub Actions stub that runs `make ci`. |
+| [`azure-pipelines.yml`](azure-pipelines.yml) | Thin Azure DevOps stub that runs `make ci`. |
+
+### Extending `make ci` for your project
+
+Add your build/test steps to the `ci` target in the [`Makefile`](Makefile). For
+example, for a .NET project:
+
+```make
+ci: check-pre-commit lint test ## Run the full CI check suite
+
+test: ## Run the test suite
+	dotnet test
+```
+
+Because the logic is in the Makefile, those steps run identically locally and
+on every CI platform — no YAML changes required.
+
+### What you still configure per platform (and why)
+
+The thin-wrapper pattern minimizes platform-specific config but cannot
+eliminate it. Each platform requires its own small YAML stub, and a few
+concerns are inherently platform-specific and **cannot** be pushed into a
+portable script:
+
+- **The stub file itself** — GitHub needs `.github/workflows/*.yml`; Azure
+  DevOps needs `azure-pipelines.yml`. The template ships both, pre-wired to
+  `make ci`.
+- **Triggers** (which branches/events run CI) — expressed differently on each
+  platform.
+- **Secrets, service connections, OIDC, and permissions** — managed in each
+  platform's settings/YAML, never in the repo.
+- **Runner/agent image** and **prerequisite installation** (Python,
+  `pre-commit`).
+
+Everything else — the actual checks — is shared via `make ci`.
+
+### Determinism
+
+- Hook versions are pinned via `rev` in
+  [`.pre-commit-config.yaml`](.pre-commit-config.yaml).
+- The Python interpreter is pinned to **3.10** in both CI stubs (matching the
+  per-hook `language_version`; see [Requirements](#requirements)).
+- Both stubs cache pre-commit hook environments keyed on the config file, so
+  unchanged hooks are not rebuilt.
+
+Bump these versions deliberately when you want to upgrade.
+
 ## Make targets
 
 | Target | Description |
 | --- | --- |
 | `make help` | Show available targets (default when running `make`). |
 | `make setup` | Configure the repo to use the shared git config and pre-commit hooks. Runs the preflight checks first. |
+| `make ci` | Run the full CI check suite — the single command CI/CD pipelines invoke. Runs identically locally. |
+| `make lint` | Run all pre-commit hooks against all files. |
 | `make check-pre-commit` | Verify the `pre-commit` tool is installed. |
 | `make check-python` | Verify a Python 3.10 interpreter is available for the hooks. |
 

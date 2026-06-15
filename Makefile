@@ -7,6 +7,8 @@
 #   make            # same as `make help`
 #   make help       # list available targets
 #   make setup      # configure the repo to use shared git config + hooks
+#   make ci         # run the full CI check suite (the command pipelines invoke)
+#   make lint       # run all pre-commit hooks against all files
 #
 # Requirements:
 #   - The `pre-commit` tool must be installed and on your PATH.
@@ -23,13 +25,29 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: setup check-pre-commit check-python help
+.PHONY: setup ci lint check-pre-commit check-python help
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 setup: check-pre-commit check-python ## Configure the repo to use the shared git config and pre-commit hooks
 	git config --local include.path ../.gitconfig
+
+# ---------------------------------------------------------------------------
+# CI ENTRYPOINT
+# ---------------------------------------------------------------------------
+# `make ci` is the SINGLE command CI/CD pipelines invoke. Both the GitHub
+# Actions workflow (.github/workflows/ci.yml) and the Azure DevOps pipeline
+# (azure-pipelines.yml) do nothing more than: check out the code, install the
+# prerequisites, and run `make ci`. All actual logic lives here, in-repo, so
+# it runs identically on a developer laptop and on every CI platform.
+#
+# Projects built from this template extend `ci` by adding their own build/test
+# steps (e.g. `dotnet test`, `npm test`) as dependencies or extra recipe lines.
+ci: check-pre-commit lint ## Run the full CI check suite (what pipelines invoke)
+
+lint: check-pre-commit ## Run all pre-commit hooks against all files (same hooks as the git hooks)
+	pre-commit run --all-files --show-diff-on-failure
 
 check-pre-commit: ## Verify the pre-commit tool is installed
 	@command -v pre-commit > /dev/null || { \
