@@ -39,6 +39,11 @@ repos:
     -   id: detect-private-key
     -   id: fix-byte-order-marker
     -   id: mixed-line-ending
+    -   id: no-commit-to-branch
+        # Block direct commits to the mainline; changes must go through a
+        # branch + PR. Protects `main` and `master` by default; both are
+        # listed explicitly so the policy is obvious and rename-proof.
+        args: [--branch, main, --branch, master]
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1  # Specify the desired version of Gitleaks
     hooks:
