@@ -142,7 +142,13 @@ portable script:
   DevOps needs `azure-pipelines.yml`. The template ships both, pre-wired to
   `make ci`.
 - **Triggers** (which branches/events run CI) — expressed differently on each
-  platform.
+  platform. Both stubs ship pre-configured to run CI on:
+  - **pushes** to `main` and `develop`, and
+  - **pull requests** targeting `develop`.
+
+  Adjust the `on`/`trigger`/`pr` sections in
+  [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and
+  [`azure-pipelines.yml`](azure-pipelines.yml) to change this.
 - **Secrets, service connections, OIDC, and permissions** — managed in each
   platform's settings/YAML, never in the repo.
 - **Runner/agent image** and **prerequisite installation** (Python,
