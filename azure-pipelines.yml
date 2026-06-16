@@ -20,11 +20,12 @@ trigger:
   branches:
     include:
       - main
+      - develop
 
 pr:
   branches:
     include:
-      - "*"
+      - develop
 
 pool:
   vmImage: ubuntu-latest
