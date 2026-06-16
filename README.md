@@ -75,9 +75,7 @@ Run `make help` (or just `make`) to list the available targets.
   large-file guard (blocks files over 500 kB by default), case-conflict
   detection (catches filename collisions on case-insensitive filesystems like
   macOS/Windows), illegal Windows names, merge-conflict markers, private-key
-  detection, byte-order-marker fix, mixed line endings, and a
-  **direct-commit guard** (`no-commit-to-branch`) that blocks committing
-  straight to `main`/`master` so changes go through a branch + PR.
+  detection, byte-order-marker fix, and mixed line endings.
 - **gitleaks**: scans for hardcoded secrets.
 - **commitizen** (`commit-msg` stage): validates commit messages follow the
   Conventional Commits format, e.g.:
@@ -87,24 +85,6 @@ Run `make help` (or just `make`) to list the available targets.
   chore: bump dependencies
   ```
 - **sync-pre-commit-deps**: keeps hook dependency versions in sync.
-
-> **Note — the direct-commit guard is a local convenience, not enforcement.**
-> `no-commit-to-branch` only runs on machines where the hooks are installed
-> (`make setup`) and can be bypassed with `git commit --no-verify`. It does
-> nothing on the server. For real enforcement, pair it with a server-side
-> branch policy:
->
-> - **GitHub**: a [branch protection rule](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/managing-a-branch-protection-rule)
->   (or ruleset) on `main` — require pull requests, block direct pushes, and
->   require the `ci` status check to pass. This can be configured directly in
->   the repository's **Settings → Branches**, and codified as a
->   [ruleset](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets).
-> - **Azure DevOps**: a [branch policy](https://learn.microsoft.com/en-us/azure/devops/repos/git/branch-policies?view=azure-devops)
->   on `main` (require a PR, minimum reviewers, build validation). Azure Repos
->   branch policies are **not** stored in the repository — they are
->   project/repo settings applied through the Azure DevOps UI or REST API, so
->   they can't be committed as a file in this template the way a GitHub ruleset
->   can.
 
 ## CI/CD integration
 
