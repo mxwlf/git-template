@@ -41,7 +41,7 @@ steps:
   # the hooks need this exact version.
   - task: UsePythonVersion@0
     inputs:
-      versionSpec: "3.13"
+      versionSpec: "3.14"
 
   # Cache pre-commit hook environments keyed on the config so unchanged hooks
   # are not rebuilt on every run.

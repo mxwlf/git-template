@@ -178,7 +178,7 @@ Everything else — the actual checks — is shared via `make ci`.
   regardless of what is installed globally.
 - Hook versions are pinned via `rev` in
   [`.pre-commit-config.yaml`](.pre-commit-config.yaml).
-- Both CI stubs pin the interpreter used to build `.venv` (currently 3.13) for
+- Both CI stubs pin the interpreter used to build `.venv` (currently 3.14) for
   reproducible runs. Any `>= 3.10` works; the pin is not a hook requirement.
 - Both stubs cache pre-commit hook environments keyed on the config file, so
   unchanged hooks are not rebuilt.
