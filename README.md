@@ -5,39 +5,42 @@ My baseline git template. It ships a shared git configuration and a set of
 template gets consistent commit hygiene and commit-message formatting out of
 the box.
 
+All tooling lives in a **repo-local virtualenv** (`.venv/`) created by
+`make setup`. Nothing is installed globally, and no specific global Python
+version is required.
+
 ## Requirements
 
-- [`pre-commit`](https://pre-commit.com) installed and on your `PATH`:
+- **GNU make**, **git**, and a POSIX shell (on Windows: Git Bash or WSL).
+- **Any Python interpreter `>= 3.10`** reachable as `python3`. It is used *only*
+  to create `.venv/`, so whatever you already have works — system, Homebrew,
+  pyenv, uv, asdf. If your default `python3` is older, point make at another
+  interpreter instead of changing your system default:
+
   ```sh
-  pipx install pre-commit   # or: brew install pre-commit
+  make setup PYTHON=python3.12          # or an absolute path
   ```
-- A **Python 3.10** interpreter installed on your system (required by the
-  [commitizen](https://commitizen-tools.github.io/commitizen/) and
-  [sync-pre-commit-deps](https://github.com/pre-commit/sync-pre-commit-deps)
-  hooks). Install instructions per platform:
 
-  | Platform | Install command |
-  | --- | --- |
-  | macOS (Homebrew) | `brew install python@3.10` |
-  | Linux (Debian/Ubuntu) | `sudo apt install python3.10` |
-  | Linux (any, via pyenv) | `pyenv install 3.10` |
-  | Windows | Download from [python.org](https://www.python.org/downloads/) (the installer registers it with the `py` launcher as `py -3.10`). |
+  Check what make will use with `make check-python`.
 
-  > **Why exactly 3.10?** Some hooks require Python `>=3.10`, but pre-commit
-  > otherwise uses each hook's own default interpreter (`python3` in their
-  > manifests) — which on many systems (notably macOS) is an older 3.9 that
-  > fails to build the hook environments with `requires a different Python`. The
-  > template therefore sets `language_version: python3.10` explicitly on the
-  > affected hooks in [`.pre-commit-config.yaml`](.pre-commit-config.yaml).
-  > (A top-level `default_language_version` would *not* work here: pre-commit
-  > only applies it to hooks that don't already declare their own
-  > `language_version`, and these hooks do.) `python3.10` is a version request
-  > that pre-commit resolves to a real interpreter on Windows, Linux, and macOS
-  > (on Windows through the `py` launcher). A Python **3.10** interpreter
-  > therefore needs to be installed, though it does not need to be your default
-  > `python3`. To standardize on a newer version, change the `language_version`
-  > values in [`.pre-commit-config.yaml`](.pre-commit-config.yaml) (see
-  > [Troubleshooting](#troubleshooting)).
+That is the whole list — `pre-commit` itself is **not** a prerequisite.
+`make setup` installs the pinned version from
+[`requirements-dev.txt`](requirements-dev.txt) into `.venv/`.
+
+> **Why a venv instead of a required global Python version?** Some hooks
+> (commitizen, sync-pre-commit-deps) are `language: python` and need
+> Python `>= 3.10`. Their upstream manifests declare `language_version: python3`,
+> which pre-commit resolves to *the interpreter running pre-commit itself* — not
+> to whatever `python3` is on your `PATH`. So a `pre-commit` installed under an
+> old interpreter (e.g. macOS's bundled Python 3.9) builds those hook
+> environments with 3.9 and fails with `requires a different Python`.
+>
+> Rather than papering over that with per-hook `language_version` pins — which
+> forced every contributor to install one exact Python version globally — the
+> template runs pre-commit from `.venv/`, built from any Python `>= 3.10`. The
+> hooks inherit that interpreter, so
+> [`.pre-commit-config.yaml`](.pre-commit-config.yaml) needs no interpreter pins
+> at all and your machine's Python setup is left alone.
 
 ## Setup
 
@@ -47,16 +50,20 @@ From the repository root:
 make setup
 ```
 
-This runs:
+This does three things:
 
-```sh
-git config --local include.path ../.gitconfig
-```
+1. Creates `.venv/` and installs the pinned tooling
+   ([`requirements-dev.txt`](requirements-dev.txt)) into it.
+2. Runs `git config --local include.path ../.gitconfig`, which makes the repo's
+   local config include the committed [`.gitconfig`](.gitconfig). That config
+   sets `core.hooksPath = .githooks/`, activating the committed hook scripts.
+   Because the hooks live in `.githooks/` and are wired up through
+   `include.path`, **`pre-commit install` is not required**.
+3. Runs `pre-commit install-hooks` to pre-build the hook environments, so your
+   first commit isn't slowed down by it.
 
-which makes the repo's local config include the committed [`.gitconfig`](.gitconfig).
-That config sets `core.hooksPath = .githooks/`, activating the committed hook
-scripts. Because the hooks live in `.githooks/` and are wired up through
-`include.path`, **`pre-commit install` is not required**.
+You never need to *activate* `.venv`: the hook scripts in `.githooks/` and every
+make target invoke `.venv/bin/pre-commit` by absolute path.
 
 Run `make help` (or just `make`) to list the available targets.
 
@@ -65,9 +72,15 @@ Run `make help` (or just `make`) to list the available targets.
 | File | Purpose |
 | --- | --- |
 | [`.gitconfig`](.gitconfig) | Sets `core.hooksPath = .githooks/` so the committed hooks are used. |
-| [`.githooks/pre-commit`](.githooks/pre-commit) | Runs the `pre-commit`-stage hooks (formatting, secret detection, etc.). |
-| [`.githooks/commit-msg`](.githooks/commit-msg) | Runs commitizen to enforce [Conventional Commits](https://www.conventionalcommits.org/) message format. |
-| [`.pre-commit-config.yaml`](.pre-commit-config.yaml) | Declares the hook repos and versions, and pins the Python interpreter (`language_version: python3.10`) on the Python hooks that require it. |
+| [`.githooks/pre-commit`](.githooks/pre-commit) | Runs the `pre-commit`-stage hooks (formatting, secret detection, etc.) via `.venv`. |
+| [`.githooks/commit-msg`](.githooks/commit-msg) | Runs commitizen via `.venv` to enforce [Conventional Commits](https://www.conventionalcommits.org/) message format. |
+| [`.pre-commit-config.yaml`](.pre-commit-config.yaml) | Declares the hook repos and pinned versions (`rev`). |
+| [`requirements-dev.txt`](requirements-dev.txt) | The pinned tooling installed into `.venv/` — just `pre-commit`. |
+| `.venv/` | The repo-local virtualenv. Created by `make setup`, git-ignored, disposable (`make clean`). |
+
+Each hook's own dependencies are installed by pre-commit into its own cached
+environments (`~/.cache/pre-commit`, or `~/Library/Caches/pre-commit` on macOS),
+not into `.venv/`.
 
 ### Hooks included
 
@@ -94,19 +107,21 @@ pattern (see [Martin Fowler on Continuous
 Integration](https://martinfowler.com/articles/continuousIntegration.html#AutomateTheBuild)):
 all the actual check logic lives **in the repository** behind a single command,
 and each CI platform's config does nothing more than check out the code,
-install prerequisites, and run that one command.
+provide a Python interpreter, and run that one command.
 
 ```
 make ci                       ← single source of truth (runs locally too)
-  └── pre-commit run --all-files
-        └── hooks in .pre-commit-config.yaml
+  └── .venv/ (built from requirements-dev.txt)
+        └── pre-commit run --all-files
+              └── hooks in .pre-commit-config.yaml
 
-.github/workflows/ci.yml      ← thin stub: checkout → setup → `make ci`
-azure-pipelines.yml           ← thin stub: checkout → setup → `make ci`
+.github/workflows/ci.yml      ← thin stub: checkout → python → `make ci`
+azure-pipelines.yml           ← thin stub: checkout → python → `make ci`
 ```
 
 The same `make ci` a developer runs on their laptop is exactly what runs on
-GitHub Actions and Azure DevOps. To change *what* CI does, edit the
+GitHub Actions and Azure DevOps — including building the venv, so the CI stubs
+install nothing themselves. To change *what* CI does, edit the
 [`Makefile`](Makefile) and [`.pre-commit-config.yaml`](.pre-commit-config.yaml)
 — **not** the platform YAML.
 
@@ -122,7 +137,7 @@ Add your build/test steps to the `ci` target in the [`Makefile`](Makefile). For
 example, for a .NET project:
 
 ```make
-ci: check-pre-commit lint test ## Run the full CI check suite
+ci: lint test ## Run the full CI check suite
 
 test: ## Run the test suite
 	dotnet test
@@ -151,17 +166,20 @@ portable script:
   [`azure-pipelines.yml`](azure-pipelines.yml) to change this.
 - **Secrets, service connections, OIDC, and permissions** — managed in each
   platform's settings/YAML, never in the repo.
-- **Runner/agent image** and **prerequisite installation** (Python,
-  `pre-commit`).
+- **Runner/agent image** and **which Python interpreter is on the agent** (the
+  base for `.venv`).
 
 Everything else — the actual checks — is shared via `make ci`.
 
 ### Determinism
 
+- `pre-commit` is pinned in [`requirements-dev.txt`](requirements-dev.txt) and
+  installed into an isolated `.venv/`, so CI and laptops run the same version
+  regardless of what is installed globally.
 - Hook versions are pinned via `rev` in
   [`.pre-commit-config.yaml`](.pre-commit-config.yaml).
-- The Python interpreter is pinned to **3.10** in both CI stubs (matching the
-  per-hook `language_version`; see [Requirements](#requirements)).
+- Both CI stubs pin the interpreter used to build `.venv` (currently 3.13) for
+  reproducible runs. Any `>= 3.10` works; the pin is not a hook requirement.
 - Both stubs cache pre-commit hook environments keyed on the config file, so
   unchanged hooks are not rebuilt.
 
@@ -172,22 +190,34 @@ Bump these versions deliberately when you want to upgrade.
 | Target | Description |
 | --- | --- |
 | `make help` | Show available targets (default when running `make`). |
-| `make setup` | Configure the repo to use the shared git config and pre-commit hooks. Runs the preflight checks first. |
+| `make setup` | Create `.venv`, then configure the repo to use the shared git config and pre-commit hooks. |
+| `make venv` | Create/update `.venv` from `requirements-dev.txt` (no-op when up to date). |
 | `make ci` | Run the full CI check suite — the single command CI/CD pipelines invoke. Runs identically locally. |
 | `make lint` | Run all pre-commit hooks against all files. |
-| `make check-pre-commit` | Verify the `pre-commit` tool is installed. |
-| `make check-python` | Verify a Python 3.10 interpreter is available for the hooks. |
+| `make clean` | Remove `.venv` (rebuild with `make setup`). |
+| `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |
+
+Override the interpreter for any of these with `PYTHON=...`, e.g.
+`make setup PYTHON=python3.12`.
 
 ## Troubleshooting
 
-- **`` `pre-commit` not found ``** — install the tool (see [Requirements](#requirements)).
+- **`` `pre-commit` was not found in this repository's .venv/ ``** — the venv is
+  missing (fresh clone, new worktree, or `make clean`). Run `make setup` from
+  the repository root.
+- **`Error: python3 ... but >= 3.10 is required`** — the interpreter make would
+  use to build `.venv` is too old. Install any newer Python and either put it on
+  your `PATH` as `python3` or pass it explicitly: `make setup PYTHON=python3.12`.
+  You do **not** need to change your system default.
 - **commitizen / sync-pre-commit-deps fails to build / `requires a different Python`** —
-  a Python 3.10 interpreter could not be found. Install it (see
-  [Requirements](#requirements)) and re-run `make check-python` to confirm it is
-  detected. The interpreter is pinned per-hook via `language_version: python3.10`
-  in [`.pre-commit-config.yaml`](.pre-commit-config.yaml); to standardize on a
-  different version, change those `language_version` values (e.g. to
-  `python3.11`) and make sure that interpreter is installed.
+  the hooks are being run by a pre-commit *outside* `.venv/` (a global install
+  under an old interpreter). Confirm `make setup` has been run and that
+  `git config --get core.hooksPath` prints `.githooks/`; if a stray
+  `pre-commit install` overwrote `.git/hooks/`, delete those generated files so
+  `core.hooksPath` takes effect again. See
+  [Requirements](#requirements) for why the interpreter is chosen this way.
+- **`.venv` broke after a Python upgrade** (e.g. Homebrew replaced the
+  interpreter it was built from) — recreate it: `make clean && make setup`.
 - **Hook is ignored / not running** — confirm `make setup` has been run
   (`git config --get include.path` should print `../.gitconfig`) and that the
   hook scripts in `.githooks/` are executable.
