@@ -28,8 +28,15 @@ on:
     branches: [main, develop]
 
 jobs:
+  # The job id is the name GitHub reports this check under, so it is also the
+  # `context` that .github/rulesets/*.json requires. Renaming it silently breaks
+  # branch protection: the required check is never reported, and pull requests
+  # wait on it forever. Change both together.
   ci:
-    runs-on: ubuntu-latest
+    # Pinned rather than `ubuntu-latest`: that label is remapped to a new Ubuntu
+    # release periodically, which would change the build environment underneath
+    # you on GitHub's schedule instead of yours. Bump this deliberately.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
