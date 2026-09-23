@@ -11,6 +11,10 @@
 #   make lint       # run all pre-commit hooks against all files
 #   make clean      # remove the local virtualenv
 #
+#   make rulesets-apply    # rebuild this repo's GitHub branch protection
+#   make rulesets-diff     # check live branch protection against the repo
+#   make rulesets-export   # save live branch protection into the repo
+#
 # Requirements:
 #   - GNU make, git, and a POSIX shell (on Windows: Git Bash or WSL).
 #   - A Python interpreter >= $(MIN_PYTHON) reachable as `python3`. It is used
@@ -57,7 +61,10 @@ PRE_COMMIT := $(VENV_BIN)/pre-commit
 # .venv; makes `venv` a no-op until the requirements change.
 VENV_STAMP := $(VENV)/.requirements-installed
 
-.PHONY: setup venv ci lint clean check-python help
+RULESETS := ./scripts/github-rulesets.sh
+
+.PHONY: setup venv ci lint clean check-python help \
+        rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -93,6 +100,30 @@ lint: venv ## Run all pre-commit hooks against all files (same hooks as the git 
 
 clean: ## Remove the local virtualenv (rebuild it with `make setup`)
 	rm -rf $(VENV)
+
+# ---------------------------------------------------------------------------
+# GITHUB RULESETS (branch protection as code)
+# ---------------------------------------------------------------------------
+# Branch protection lives in .github/rulesets/*.json and is reconciled by name,
+# so `make rulesets-apply` rebuilds it in any repo created from this template.
+# See scripts/github-rulesets.sh for the details.
+#
+# These targets are deliberately NOT dependencies of `ci`: rulesets are admin
+# API surface, and a workflow's default GITHUB_TOKEN cannot read them. Making
+# `ci` depend on them would fail for reasons unrelated to the code under test,
+# and would break the rule that `make ci` runs identically on a laptop.
+#
+# Requires the GitHub CLI (`gh`), authenticated — unlike the targets above, this
+# is not covered by `make setup`. Target another repo with REPO=owner/name.
+
+rulesets-apply: ## Create/update this repo's GitHub rulesets from .github/rulesets/
+	$(RULESETS) apply
+
+rulesets-diff: ## Report drift between .github/rulesets/ and the live rulesets
+	$(RULESETS) diff
+
+rulesets-export: ## Overwrite .github/rulesets/ with the live rulesets
+	$(RULESETS) export
 
 check-python: ## Verify the interpreter used to build .venv is new enough
 	@command -v $(PYTHON) > /dev/null 2>&1 || { \

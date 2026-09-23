@@ -159,7 +159,12 @@ portable script:
 - **Triggers** (which branches/events run CI) — expressed differently on each
   platform. Both stubs ship pre-configured to run CI on:
   - **pushes** to `main` and `develop`, and
-  - **pull requests** targeting `develop`.
+  - **pull requests** targeting `main` and `develop`.
+
+  The pull-request trigger must cover every branch you gate with a required
+  status check (see [Branch protection](#branch-protection-github-rulesets)).
+  A required check that never runs is never reported, and the pull request
+  waits on it forever.
 
   Adjust the `on`/`trigger`/`pr` sections in
   [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and
@@ -185,6 +190,34 @@ Everything else — the actual checks — is shared via `make ci`.
 
 Bump these versions deliberately when you want to upgrade.
 
+## Branch protection (GitHub rulesets)
+
+CI that merely *reports* a failure does not keep a broken commit off `main`.
+A commit cannot be rejected because CI failed — CI only starts once the commit
+exists. What actually protects a branch is a rule that refuses the merge until
+a check has already passed, which lives on the GitHub side, not in a git hook.
+
+This template keeps those rules **in the repo**, as
+[`.github/rulesets/*.json`](.github/rulesets), and rebuilds them with the
+GitHub CLI:
+
+```sh
+make rulesets-apply     # create/update the rulesets on GitHub
+make rulesets-diff      # fail if GitHub no longer matches the repo
+make rulesets-export    # overwrite the JSON from GitHub (after a UI edit)
+```
+
+Rulesets are reconciled **by name**, not by id: GitHub assigns ids per
+repository, so a committed id would be meaningless in a repo created from this
+template. `apply` looks up each file's `name`, updates the ruleset if it exists
+and creates it if it does not — so it is idempotent, and works on a fresh repo.
+
+`make rulesets-apply` requires the GitHub CLI (`gh`), authenticated with admin
+rights on the repo. Unlike everything else here, `gh` is **not** installed by
+`make setup`, and these targets are deliberately **not** part of `make ci` — see
+[`.github/rulesets/README.md`](.github/rulesets/README.md) for why, and for what
+the shipped rulesets enforce.
+
 ## Make targets
 
 | Target | Description |
@@ -196,6 +229,9 @@ Bump these versions deliberately when you want to upgrade.
 | `make lint` | Run all pre-commit hooks against all files. |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |
+| `make rulesets-apply` | Create/update this repo's GitHub rulesets from `.github/rulesets/`. Needs `gh`. |
+| `make rulesets-diff` | Report drift between `.github/rulesets/` and the live rulesets. Needs `gh`. |
+| `make rulesets-export` | Overwrite `.github/rulesets/` with the live rulesets. Needs `gh`. |
 
 Override the interpreter for any of these with `PYTHON=...`, e.g.
 `make setup PYTHON=python3.12`.
