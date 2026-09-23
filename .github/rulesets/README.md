@@ -13,6 +13,10 @@ All three run [`scripts/github-rulesets.sh`](../../scripts/github-rulesets.sh),
 which talks to `/repos/{owner}/{repo}/rulesets` via `gh api`. The `gh ruleset`
 command group is read-only (`check`, `list`, `view`), so it cannot do this.
 
+This file covers how the rules are *stored and rebuilt*. For the day-to-day
+workflow they impose — how a change actually reaches `main` — see
+[The workflow these rules require](../../README.md#the-workflow-these-rules-require).
+
 ## What the shipped rulesets enforce
 
 | | `main-protection` | `develop-protection` |

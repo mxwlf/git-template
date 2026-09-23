@@ -185,6 +185,10 @@ Everything else — the actual checks — is shared via `make ci`.
   [`.pre-commit-config.yaml`](.pre-commit-config.yaml).
 - Both CI stubs pin the interpreter used to build `.venv` (currently 3.14) for
   reproducible runs. Any `>= 3.10` works; the pin is not a hook requirement.
+- Both stubs pin the runner/agent image (currently `ubuntu-24.04`) instead of
+  using `ubuntu-latest`. That label is remapped to a new Ubuntu release
+  periodically, which would move the build environment on the platform's
+  schedule rather than yours.
 - Both stubs cache pre-commit hook environments keyed on the config file, so
   unchanged hooks are not rebuilt.
 
@@ -217,6 +221,43 @@ rights on the repo. Unlike everything else here, `gh` is **not** installed by
 `make setup`, and these targets are deliberately **not** part of `make ci` — see
 [`.github/rulesets/README.md`](.github/rulesets/README.md) for why, and for what
 the shipped rulesets enforce.
+
+### The workflow these rules require
+
+With `main-protection` active, `main` cannot be written to directly. Every
+change reaches it the same way:
+
+1. **Work on `develop`** (or a branch off it). Commits are checked locally by
+   the hooks from `make setup`, and pushing runs `make ci` on the server.
+   `develop-protection` ships **disabled**, so committing straight to `develop`
+   is allowed until you enable it.
+2. **Open a pull request into `main`.** A direct `git push origin main` is
+   rejected by the ruleset, as is a force-push and a branch deletion.
+3. **Let `ci` finish and pass.** It is a required check, so the merge button
+   stays disabled until it reports success. The branch must also be up to date
+   with `main` first (`strict_required_status_checks_policy`), so if `main`
+   moved, rebase and let `ci` run again.
+4. **Merge with rebase.** `main` accepts *only* rebase merges — the merge and
+   squash buttons are not offered. GitHub signs the commits it creates, which
+   satisfies the signed-commits rule; a local rebase-and-push cannot land on
+   `main` at all.
+
+What this buys you, and what it does not: the rules keep a red build from
+reaching `main` by accident. They are not a hard stop, because the shipped
+`main-protection` lets a repository admin bypass them *inside a pull request*
+(`bypass_mode: "pull_request"`) — which is also what makes the required approval
+satisfiable on a one-maintainer repo, since you cannot approve your own pull
+request. Drop the `bypass_actors` entry to make the check absolute, and drop
+`required_approving_review_count` to 0 at the same time or nothing will ever
+merge.
+
+> **Keep the check name and the trigger in sync.** The required check is the
+> `ci` **job id** in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), and
+> that workflow's `pull_request` trigger must list every branch the rulesets
+> protect. Rename the job, or protect a new branch without extending the
+> trigger, and the required check is simply never reported — the pull request
+> then waits on it indefinitely rather than failing. Both files have to change
+> together.
 
 ## Make targets
 
