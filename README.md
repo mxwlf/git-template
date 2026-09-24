@@ -237,10 +237,18 @@ change reaches it the same way:
    stays disabled until it reports success. The branch must also be up to date
    with `main` first (`strict_required_status_checks_policy`), so if `main`
    moved, rebase and let `ci` run again.
-4. **Merge with rebase.** `main` accepts *only* rebase merges — the merge and
-   squash buttons are not offered. GitHub signs the commits it creates, which
-   satisfies the signed-commits rule; a local rebase-and-push cannot land on
+4. **Merge with squash.** `main` accepts *only* squash merges — the merge and
+   rebase buttons are not offered. GitHub signs the single commit it creates,
+   which is what satisfies `required_signatures`; a local push cannot land on
    `main` at all.
+
+   **Rebase merges are deliberately not allowed, and cannot be.** A rebase merge
+   rewrites each commit into a new object, which discards the author's
+   signature, and GitHub has no key with which to re-sign on the author's
+   behalf. Enabling `rebase` alongside `required_signatures` produces a merge
+   button that always fails with *"Base branch requires signed commits. Rebase
+   merges cannot be automatically signed by GitHub."* The two rules are
+   mutually exclusive, so pick which one matters more before changing this.
 
 What this buys you, and what it does not: the rules keep a red build from
 reaching `main` by accident. They are not a hard stop, because the shipped

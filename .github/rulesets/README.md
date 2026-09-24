@@ -26,7 +26,7 @@ workflow they impose — how a change actually reaches `main` — see
 | Required check | `ci` (GitHub Actions) | `ci` (GitHub Actions) |
 | Branch must be up to date | yes | yes |
 | Approvals | 1, admins may bypass in a PR | 1 |
-| Merge methods | rebase only | merge, squash, rebase |
+| Merge methods | squash only (see below) | merge, squash, rebase |
 | Signed commits | required | not required |
 | Force push / deletion | blocked | blocked |
 
@@ -38,8 +38,17 @@ Two consequences of `main-protection` worth knowing before you enable it on a
 project:
 
 - **Merges must happen through GitHub.** Direct pushes to `main` are blocked, and
-  with `required_signatures` the merge commits must be signed — GitHub signs the
-  ones it creates itself. A local rebase-and-push will be rejected.
+  `required_signatures` means whatever lands there must be signed. GitHub signs
+  the commits it creates for a squash or a merge, so those satisfy the rule. A
+  local push will be rejected.
+- **`required_signatures` rules out rebase merges.** A rebase merge rewrites each
+  commit into a new object, discarding the author's signature, and GitHub cannot
+  re-sign on the author's behalf. Listing `rebase` in `allowed_merge_methods`
+  alongside this rule yields a merge button that always fails with *"Base branch
+  requires signed commits. Rebase merges cannot be automatically signed by
+  GitHub."* That is why `main` allows squash only. If you want rebase merges and
+  a linear history of individual commits, you have to drop `required_signatures`
+  — the two cannot coexist.
 - **The admin bypass is real.** `bypass_mode: "pull_request"` lets an admin merge
   a pull request whose `ci` check is red. It prevents an accidental merge, not a
   deliberate one. Remove the `bypass_actors` entry if you want the check to be
