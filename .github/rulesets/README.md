@@ -60,6 +60,28 @@ Three consequences worth knowing before you enable this on a project:
   `required_approving_review_count: 1` unsatisfiable, since you cannot approve
   your own pull request.
 
+## The ruleset cannot enable a merge method the repository forbids
+
+`allowed_merge_methods` only *narrows* what the repository already permits. The
+repository has its own `allow_merge_commit` / `allow_squash_merge` /
+`allow_rebase_merge` switches, they are not part of any ruleset, and this file
+cannot set them. Ask for a method the repository has switched off and the merge is
+refused outright:
+
+> Merge commits are not allowed on this repository.
+
+This repository already has merge commits enabled, so nothing is needed here — but
+a repo created from this template may not. Enable it under **Settings → General →
+Pull Requests**, or:
+
+```sh
+gh api --method PATCH repos/OWNER/REPO -F allow_merge_commit=true
+```
+
+This is the one part of the gate that `make rulesets-apply` cannot reproduce for
+you, because it lives on the repository rather than in a ruleset. It surfaced in
+`dotnet-template`, where the first merge under this policy failed on exactly that.
+
 ## The required check must actually run
 
 A required status check that is never reported is never green, so the pull
