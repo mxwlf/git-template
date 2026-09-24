@@ -21,17 +21,19 @@
 # requirements-dev.txt; hook versions via `rev` in .pre-commit-config.yaml).
 # Bump them deliberately.
 
+# Trunk-based: `main` is the only long-lived branch. The `pr` trigger is the
+# gate and fires for a pull request from any source branch. `trigger` covers
+# `main` only, deliberately: adding feature branches would run the same commits
+# twice for no extra signal.
 trigger:
   branches:
     include:
       - main
-      - develop
 
 pr:
   branches:
     include:
       - main
-      - develop
 
 pool:
   # Pinned rather than `ubuntu-latest`: that label is remapped to a new Ubuntu

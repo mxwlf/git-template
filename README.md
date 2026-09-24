@@ -158,8 +158,12 @@ portable script:
   `make ci`.
 - **Triggers** (which branches/events run CI) — expressed differently on each
   platform. Both stubs ship pre-configured to run CI on:
-  - **pushes** to `main` and `develop`, and
-  - **pull requests** targeting `main` and `develop`.
+  - **pushes** to `main`, and
+  - **pull requests** targeting `main`, from any source branch.
+
+  Feature branches are intentionally absent from the push trigger: a branch that
+  has an open pull request would otherwise build the same commits twice for no
+  extra signal.
 
   The pull-request trigger must cover every branch you gate with a required
   status check (see [Branch protection](#branch-protection-github-rulesets)).
@@ -224,31 +228,39 @@ the shipped rulesets enforce.
 
 ### The workflow these rules require
 
+The workflow is **trunk-based**. `main` is the only long-lived branch: there is
+no `develop` to stage through, and no release branches. Everything else is a
+short-lived branch that exists just long enough to carry one pull request, and
+is deleted after it merges.
+
 With `main-protection` active, `main` cannot be written to directly. Every
 change reaches it the same way:
 
-1. **Work on `develop`** (or a branch off it). Commits are checked locally by
-   the hooks from `make setup`, and pushing runs `make ci` on the server.
-   `develop-protection` ships **disabled**, so committing straight to `develop`
-   is allowed until you enable it.
+1. **Branch off `main`.** Name it however you like — the rules place no
+   constraint on source branches, and a feature branch needs no protection of
+   its own, since it cannot reach `main` except through the gate below. Keep it
+   short-lived; the point of trunk-based work is that branches merge in days,
+   not weeks. Commits are checked locally by the hooks from `make setup`.
 2. **Open a pull request into `main`.** A direct `git push origin main` is
    rejected by the ruleset, as is a force-push and a branch deletion.
 3. **Let `ci` finish and pass.** It is a required check, so the merge button
    stays disabled until it reports success. The branch must also be up to date
    with `main` first (`strict_required_status_checks_policy`), so if `main`
-   moved, rebase and let `ci` run again.
-4. **Merge with squash.** `main` accepts *only* squash merges — the merge and
-   rebase buttons are not offered. GitHub signs the single commit it creates,
-   which is what satisfies `required_signatures`; a local push cannot land on
-   `main` at all.
+   moved, update the branch and let `ci` run again.
+4. **Merge with a merge commit, then delete the branch.** `main` accepts *only*
+   merge commits — squash and rebase are not offered. That choice is about
+   authorship: a merge commit leaves your commits untouched, so each keeps the
+   signature you made, and GitHub signs the merge commit itself to satisfy
+   `required_signatures`. The trade is that `main` is not linear.
 
-   **Rebase merges are deliberately not allowed, and cannot be.** A rebase merge
-   rewrites each commit into a new object, which discards the author's
-   signature, and GitHub has no key with which to re-sign on the author's
-   behalf. Enabling `rebase` alongside `required_signatures` produces a merge
-   button that always fails with *"Base branch requires signed commits. Rebase
-   merges cannot be automatically signed by GitHub."* The two rules are
-   mutually exclusive, so pick which one matters more before changing this.
+   **Rebase merges are not allowed, and cannot be.** A rebase merge rewrites
+   each commit into a new object, which discards the author's signature, and
+   GitHub has no key with which to re-sign on the author's behalf. Enabling
+   `rebase` alongside `required_signatures` produces a merge button that always
+   fails with *"Base branch requires signed commits. Rebase merges cannot be
+   automatically signed by GitHub."* A squash merge does work, but it collapses
+   the branch into one new GitHub-signed commit, so your own signatures do not
+   survive onto `main`.
 
 What this buys you, and what it does not: the rules keep a red build from
 reaching `main` by accident. They are not a hard stop, because the shipped
