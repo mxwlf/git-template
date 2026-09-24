@@ -146,6 +146,48 @@ test: ## Run the test suite
 Because the logic is in the Makefile, those steps run identically locally and
 on every CI platform — no YAML changes required.
 
+#### The `sbom` convention
+
+An SBOM is the clearest example of a check whose *contract* is portable while its
+*implementation* cannot be. This template therefore defines the contract and
+deliberately ships no generator:
+
+| Portable — keep this shape in every project | Project-specific |
+| --- | --- |
+| A `sbom` target, in the `ci` chain, after whatever builds | The generator and its toolchain |
+| Output under the same gitignored artifacts directory the other reports use | The dependency-manifest path it reads |
+| Published by the CI stubs alongside the test and coverage reports | The SBOM's subject name and version |
+
+Nothing portable can generate the document itself, because an SBOM's substance is
+the *resolved* dependency graph, and that graph only exists inside an ecosystem's
+resolver — NuGet's `project.assets.json`, a `package-lock.json`, a populated
+virtualenv. A repo-level tool either shells out to those resolvers anyway or
+parses manifests and guesses, and guessing gets transitive and
+conditionally-referenced packages wrong. Standardising a generator here would also
+mean forcing its toolchain onto every project made from this template, which is
+exactly what the [Requirements](#requirements) list above exists to avoid.
+
+This repository has no `sbom` target of its own on purpose: it ships no artifact.
+Its only dependencies are `pre-commit` and the rev-pinned hook repos — a developer
+toolchain nobody deploys — so an SBOM of it would inventory something that is
+never shipped.
+
+[`dotnet-template`](https://github.com/mxwlf/dotnet-template) implements this
+contract for .NET, with Microsoft's `sbom-tool` producing SPDX 2.2 from
+`project.assets.json`, if you want a worked example.
+
+Two decisions worth making deliberately when you do implement it:
+
+- **Generate from the build output, not the source tree.** An SBOM should describe
+  what you ship, which means it comes after the build, the way a coverage report
+  comes after the tests.
+- **A per-pull-request SBOM and a release SBOM are different artifacts.** The
+  first is a drift detector — it catches a dependency added without its lockfile
+  updated. The authoritative one describes a released artifact and should be
+  attached to the release and attested (for example with `actions/attest-sbom`).
+  Putting `sbom` in `ci` gets you the first; the second belongs to a release
+  workflow.
+
 ### What you still configure per platform (and why)
 
 The thin-wrapper pattern minimizes platform-specific config but cannot
