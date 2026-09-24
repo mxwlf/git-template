@@ -22,10 +22,18 @@
 name: ci
 
 on:
+  # Trunk-based: `main` is the only long-lived branch. Feature branches are
+  # short-lived and reach `main` only through a pull request, so the
+  # pull_request trigger is the gate — it fires for a PR from ANY head branch,
+  # which is why no head-branch list is needed here.
+  #
+  # The push trigger covers `main` only, deliberately: adding feature branches
+  # would run the same commits twice (once for the push, once for the PR) for no
+  # extra signal.
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 jobs:
   # The job id is the name GitHub reports this check under, so it is also the

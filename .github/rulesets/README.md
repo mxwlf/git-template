@@ -19,36 +19,40 @@ workflow they impose — how a change actually reaches `main` — see
 
 ## What the shipped rulesets enforce
 
-| | `main-protection` | `develop-protection` |
-| --- | --- | --- |
-| Enforcement | `active` | `disabled` |
-| Direct pushes | blocked — pull request required | blocked when enabled |
-| Required check | `ci` (GitHub Actions) | `ci` (GitHub Actions) |
-| Branch must be up to date | yes | yes |
-| Approvals | 1, admins may bypass in a PR | 1 |
-| Merge methods | squash only (see below) | merge, squash, rebase |
-| Signed commits | required | not required |
-| Force push / deletion | blocked | blocked |
+`main-protection` is the only ruleset here, because the workflow is
+**trunk-based**: `main` is the sole long-lived branch, and everything else is a
+short-lived branch that exists only long enough to carry one pull request. There
+is no `develop` stepping stone, so there is nothing else to protect — a feature
+branch needs no rules, since it cannot reach `main` except through a reviewed,
+CI-gated pull request.
 
-`develop-protection` ships **disabled** so that a new project can commit
-straight to `develop` while it finds its feet. Flip `enforcement` to `active`
-in the JSON and run `make rulesets-apply` when you want pull requests there too.
+| `main-protection` | |
+| --- | --- |
+| Enforcement | `active` |
+| Direct pushes | blocked — pull request required, from any branch |
+| Required check | `ci` (GitHub Actions) |
+| Branch must be up to date | yes |
+| Approvals | 1, admins may bypass in a PR |
+| Merge methods | merge commits only (see below) |
+| Signed commits | required |
+| Force push / deletion | blocked |
 
-Two consequences of `main-protection` worth knowing before you enable it on a
-project:
+Three consequences worth knowing before you enable this on a project:
 
 - **Merges must happen through GitHub.** Direct pushes to `main` are blocked, and
   `required_signatures` means whatever lands there must be signed. GitHub signs
-  the commits it creates for a squash or a merge, so those satisfy the rule. A
-  local push will be rejected.
-- **`required_signatures` rules out rebase merges.** A rebase merge rewrites each
-  commit into a new object, discarding the author's signature, and GitHub cannot
-  re-sign on the author's behalf. Listing `rebase` in `allowed_merge_methods`
-  alongside this rule yields a merge button that always fails with *"Base branch
-  requires signed commits. Rebase merges cannot be automatically signed by
-  GitHub."* That is why `main` allows squash only. If you want rebase merges and
-  a linear history of individual commits, you have to drop `required_signatures`
-  — the two cannot coexist.
+  the merge commit it creates, which satisfies the rule. A local push will be
+  rejected.
+- **The merge method is a merge commit, chosen to preserve authorship.** A merge
+  commit adds one new object and leaves the branch's own commits untouched, so
+  each keeps the signature its author made. Squash and rebase both rewrite
+  history: a squash collapses the branch into one new GitHub-signed commit, and a
+  rebase rewrites every commit — which *discards* the author's signature, leaving
+  GitHub nothing to re-sign with. Listing `rebase` alongside
+  `required_signatures` yields a merge button that always fails with *"Base
+  branch requires signed commits. Rebase merges cannot be automatically signed by
+  GitHub."* The cost of merge commits is that `main` is not linear; that is the
+  deliberate trade for keeping author signatures in the history.
 - **The admin bypass is real.** `bypass_mode: "pull_request"` lets an admin merge
   a pull request whose `ci` check is red. It prevents an accidental merge, not a
   deliberate one. Remove the `bypass_actors` entry if you want the check to be
@@ -101,3 +105,15 @@ belongs in this file.
 If you change protection in the GitHub UI, run `make rulesets-export` to bring
 the change back into the repo; otherwise the next `make rulesets-apply` will
 silently revert it.
+
+**`apply` never deletes.** It creates and updates the rulesets named by the files
+here, and ignores anything else on the repo. Removing a file therefore leaves its
+ruleset live on GitHub — delete that one yourself:
+
+```sh
+id=$(gh api repos/OWNER/REPO/rulesets --jq '.[] | select(.name=="NAME") | .id')
+gh api --method DELETE repos/OWNER/REPO/rulesets/$id
+```
+
+The omission is deliberate: a prune step would give a script that runs against
+any repo the power to remove protection it did not create.
