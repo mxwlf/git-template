@@ -159,7 +159,12 @@ portable script:
 - **Triggers** (which branches/events run CI) — expressed differently on each
   platform. Both stubs ship pre-configured to run CI on:
   - **pushes** to `main` and `develop`, and
-  - **pull requests** targeting `develop`.
+  - **pull requests** targeting `main` and `develop`.
+
+  The pull-request trigger must cover every branch you gate with a required
+  status check (see [Branch protection](#branch-protection-github-rulesets)).
+  A required check that never runs is never reported, and the pull request
+  waits on it forever.
 
   Adjust the `on`/`trigger`/`pr` sections in
   [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and
@@ -180,10 +185,87 @@ Everything else — the actual checks — is shared via `make ci`.
   [`.pre-commit-config.yaml`](.pre-commit-config.yaml).
 - Both CI stubs pin the interpreter used to build `.venv` (currently 3.14) for
   reproducible runs. Any `>= 3.10` works; the pin is not a hook requirement.
+- Both stubs pin the runner/agent image (currently `ubuntu-24.04`) instead of
+  using `ubuntu-latest`. That label is remapped to a new Ubuntu release
+  periodically, which would move the build environment on the platform's
+  schedule rather than yours.
 - Both stubs cache pre-commit hook environments keyed on the config file, so
   unchanged hooks are not rebuilt.
 
 Bump these versions deliberately when you want to upgrade.
+
+## Branch protection (GitHub rulesets)
+
+CI that merely *reports* a failure does not keep a broken commit off `main`.
+A commit cannot be rejected because CI failed — CI only starts once the commit
+exists. What actually protects a branch is a rule that refuses the merge until
+a check has already passed, which lives on the GitHub side, not in a git hook.
+
+This template keeps those rules **in the repo**, as
+[`.github/rulesets/*.json`](.github/rulesets), and rebuilds them with the
+GitHub CLI:
+
+```sh
+make rulesets-apply     # create/update the rulesets on GitHub
+make rulesets-diff      # fail if GitHub no longer matches the repo
+make rulesets-export    # overwrite the JSON from GitHub (after a UI edit)
+```
+
+Rulesets are reconciled **by name**, not by id: GitHub assigns ids per
+repository, so a committed id would be meaningless in a repo created from this
+template. `apply` looks up each file's `name`, updates the ruleset if it exists
+and creates it if it does not — so it is idempotent, and works on a fresh repo.
+
+`make rulesets-apply` requires the GitHub CLI (`gh`), authenticated with admin
+rights on the repo. Unlike everything else here, `gh` is **not** installed by
+`make setup`, and these targets are deliberately **not** part of `make ci` — see
+[`.github/rulesets/README.md`](.github/rulesets/README.md) for why, and for what
+the shipped rulesets enforce.
+
+### The workflow these rules require
+
+With `main-protection` active, `main` cannot be written to directly. Every
+change reaches it the same way:
+
+1. **Work on `develop`** (or a branch off it). Commits are checked locally by
+   the hooks from `make setup`, and pushing runs `make ci` on the server.
+   `develop-protection` ships **disabled**, so committing straight to `develop`
+   is allowed until you enable it.
+2. **Open a pull request into `main`.** A direct `git push origin main` is
+   rejected by the ruleset, as is a force-push and a branch deletion.
+3. **Let `ci` finish and pass.** It is a required check, so the merge button
+   stays disabled until it reports success. The branch must also be up to date
+   with `main` first (`strict_required_status_checks_policy`), so if `main`
+   moved, rebase and let `ci` run again.
+4. **Merge with squash.** `main` accepts *only* squash merges — the merge and
+   rebase buttons are not offered. GitHub signs the single commit it creates,
+   which is what satisfies `required_signatures`; a local push cannot land on
+   `main` at all.
+
+   **Rebase merges are deliberately not allowed, and cannot be.** A rebase merge
+   rewrites each commit into a new object, which discards the author's
+   signature, and GitHub has no key with which to re-sign on the author's
+   behalf. Enabling `rebase` alongside `required_signatures` produces a merge
+   button that always fails with *"Base branch requires signed commits. Rebase
+   merges cannot be automatically signed by GitHub."* The two rules are
+   mutually exclusive, so pick which one matters more before changing this.
+
+What this buys you, and what it does not: the rules keep a red build from
+reaching `main` by accident. They are not a hard stop, because the shipped
+`main-protection` lets a repository admin bypass them *inside a pull request*
+(`bypass_mode: "pull_request"`) — which is also what makes the required approval
+satisfiable on a one-maintainer repo, since you cannot approve your own pull
+request. Drop the `bypass_actors` entry to make the check absolute, and drop
+`required_approving_review_count` to 0 at the same time or nothing will ever
+merge.
+
+> **Keep the check name and the trigger in sync.** The required check is the
+> `ci` **job id** in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), and
+> that workflow's `pull_request` trigger must list every branch the rulesets
+> protect. Rename the job, or protect a new branch without extending the
+> trigger, and the required check is simply never reported — the pull request
+> then waits on it indefinitely rather than failing. Both files have to change
+> together.
 
 ## Make targets
 
@@ -196,6 +278,9 @@ Bump these versions deliberately when you want to upgrade.
 | `make lint` | Run all pre-commit hooks against all files. |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |
+| `make rulesets-apply` | Create/update this repo's GitHub rulesets from `.github/rulesets/`. Needs `gh`. |
+| `make rulesets-diff` | Report drift between `.github/rulesets/` and the live rulesets. Needs `gh`. |
+| `make rulesets-export` | Overwrite `.github/rulesets/` with the live rulesets. Needs `gh`. |
 
 Override the interpreter for any of these with `PYTHON=...`, e.g.
 `make setup PYTHON=python3.12`.
