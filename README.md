@@ -360,3 +360,13 @@ Override the interpreter for any of these with `PYTHON=...`, e.g.
 - **Hook is ignored / not running** — confirm `make setup` has been run
   (`git config --get include.path` should print `../.gitconfig`) and that the
   hook scripts in `.githooks/` are executable.
+
+## License
+
+[MIT](LICENSE).
+
+That covers this template's own files — the `Makefile`, the git and pre-commit
+configuration, the CI stubs, the rulesets and this documentation. A repository
+created from the template inherits those files under the same terms, and MIT lets
+you relicense your own work on top of them however you like. Replace the copyright
+holder in `LICENSE` with your own when you do.
