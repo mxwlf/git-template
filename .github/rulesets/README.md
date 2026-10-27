@@ -90,6 +90,17 @@ in [`.github/workflows/ci.yml`](../workflows/ci.yml), and that workflow's
 `pull_request` trigger has to include every branch these rulesets protect. If
 you rename the job, or add a protected branch, update both files together.
 
+There is a quieter version of the same failure. A job that GitHub skips because
+of its own job-level `if:` is reported as **successful**, not skipped — so making
+such a job a required check adds a gate that is permanently green and signals
+nothing. A security workflow carrying `if: github.event_name != 'pull_request'`
+is the usual way to walk into this. Before requiring a check, confirm the job
+actually runs on a pull request.
+
+(The other direction behaves differently: when an entire *workflow* is skipped by
+a path or branch filter, its checks stay pending forever rather than passing.
+Either way, a required check is only worth anything if it genuinely runs.)
+
 ## What is portable between repositories
 
 These files are meant to be copied into repos created from this template, so
@@ -123,6 +134,13 @@ JSON has no comments. `scripts/github-rulesets.sh` strips any key beginning with
 `_`, so a `"_comment"` key in these files is harmless — but `make rulesets-export`
 regenerates them verbatim from the API and will drop it. Durable explanation
 belongs in this file.
+
+If the project has a JSON formatter — Prettier, say — exclude this directory from
+it. `make rulesets-export` writes these files in the canonical form the script
+normalizes to (2-space indent, sorted keys, one array element per line), and a
+formatter that collapses short arrays will disagree with that on every export:
+the export dirties the tree, then the formatter undoes the export. The two will
+fight indefinitely until one of them is told to stand down.
 
 If you change protection in the GitHub UI, run `make rulesets-export` to bring
 the change back into the repo; otherwise the next `make rulesets-apply` will

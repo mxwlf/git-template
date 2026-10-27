@@ -65,6 +65,14 @@ This does three things:
 You never need to *activate* `.venv`: the hook scripts in `.githooks/` and every
 make target invoke `.venv/bin/pre-commit` by absolute path.
 
+> **In a project that has its own linters, add `.venv/` to their ignore lists.**
+> It is git-ignored, but that does not stop a linter from walking it, and some
+> packages installed under it vendor JavaScript — enough to fail an ESLint run
+> that was clean the day before. This template has no such linters, so it ships
+> no ignore entries for them; a project adopting it should expect to add
+> `.venv/` to `.eslintignore`/`eslint.config.js`, `.prettierignore`, and
+> anything else that globs the whole tree.
+
 Run `make help` (or just `make`) to list the available targets.
 
 ## What gets configured
