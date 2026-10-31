@@ -67,7 +67,7 @@ RULESETS := ./scripts/github-rulesets.sh
         rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 setup: venv ## Create the local virtualenv and configure the repo's git config + hooks
 	git config --local include.path ../.gitconfig

@@ -32,6 +32,10 @@ repos:
     rev: v6.0.0
     hooks:
     -   id: trailing-whitespace
+        # Two trailing spaces are a hard line break in Markdown. Without
+        # this, the hook strips them and silently reflows prose docs. This
+        # template's own files happen to have none, but a project's will.
+        args: ["--markdown-linebreak-ext=md,markdown"]
     -   id: end-of-file-fixer
     -   id: check-yaml
     -   id: check-added-large-files
