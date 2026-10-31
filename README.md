@@ -27,6 +27,12 @@ That is the whole list — `pre-commit` itself is **not** a prerequisite.
 `make setup` installs the pinned version from
 [`requirements-dev.txt`](requirements-dev.txt) into `.venv/`.
 
+**Node is not a prerequisite either**, even though the cspell hook runs on it.
+pre-commit builds that runtime itself (through `nodeenv`) inside the hook's own
+cached environment, so the spell checker runs on the version pinned in
+[`.pre-commit-config.yaml`](.pre-commit-config.yaml) whether or not you have
+Node installed, and regardless of which version you have.
+
 > **Why a venv instead of a required global Python version?** Some hooks
 > (commitizen, sync-pre-commit-deps) are `language: python` and need
 > Python `>= 3.10`. Their upstream manifests declare `language_version: python3`,
@@ -83,6 +89,7 @@ Run `make help` (or just `make`) to list the available targets.
 | [`.githooks/pre-commit`](.githooks/pre-commit) | Runs the `pre-commit`-stage hooks (formatting, secret detection, etc.) via `.venv`. |
 | [`.githooks/commit-msg`](.githooks/commit-msg) | Runs commitizen via `.venv` to enforce [Conventional Commits](https://www.conventionalcommits.org/) message format. |
 | [`.pre-commit-config.yaml`](.pre-commit-config.yaml) | Declares the hook repos and pinned versions (`rev`). |
+| [`cspell.json`](cspell.json) | Spell-check dialect, the regions excluded from dictionary checking, and the project word list. |
 | [`requirements-dev.txt`](requirements-dev.txt) | The pinned tooling installed into `.venv/` — just `pre-commit`. |
 | `.venv/` | The repo-local virtualenv. Created by `make setup`, git-ignored, disposable (`make clean`). |
 
@@ -97,6 +104,8 @@ not into `.venv/`.
   detection (catches filename collisions on case-insensitive filesystems like
   macOS/Windows), illegal Windows names, merge-conflict markers, private-key
   detection, byte-order-marker fix, and mixed line endings.
+- **codespell** and **cspell** (markdown only): spell-check documentation. See
+  [Spell checking](#spell-checking) for how the two split the work.
 - **gitleaks**: scans for hardcoded secrets.
 - **commitizen** (`commit-msg` stage): validates commit messages follow the
   Conventional Commits format, e.g.:
@@ -106,6 +115,48 @@ not into `.venv/`.
   chore: bump dependencies
   ```
 - **sync-pre-commit-deps**: keeps hook dependency versions in sync.
+
+### Spell checking
+
+Documentation is the part of a repository nobody compiles, so a typo in it
+survives every other check. Two spell checkers run on markdown, and they are
+complementary rather than redundant:
+
+| | What it knows | Where it looks |
+| --- | --- | --- |
+| **codespell** | A curated list of ~40k known typos (`teh`, `definately`). It cannot invent a correction, so it effectively never fires falsely — but it only catches typos someone has already catalogued. | The **whole file**, fenced code blocks included. <!-- codespell:ignore teh,definately --> |
+| **cspell** | A real dictionary, so it also catches one-off misspellings nobody has catalogued. That power is also its cost: aimed at code it flags identifiers, CLI flags and file paths. | **Prose only.** [`cspell.json`](cspell.json) excludes fenced blocks, inline code spans, link *targets* and HTML comments; link *text* stays checked, since the reader sees it. |
+
+So prose gets full dictionary coverage, code blocks still get the
+high-confidence typo sweep, and neither hook can block a pull request over an
+identifier. The practical consequence for writing: **anything that is not
+English belongs in backticks** — which is what you wanted for rendering
+anyway.
+
+Three knobs, in the order you are likely to reach for them:
+
+- **A correct word is flagged** → add it to `words` in
+  [`cspell.json`](cspell.json), or put it in backticks if it is really an
+  identifier.
+
+  If *codespell* is the one complaining, prefer a line-scoped exemption —
+  `codespell:ignore word1,word2` anywhere on the line, which in markdown goes
+  in an HTML comment. The table above needs one, because naming an example
+  typo is indistinguishable from making it; view this file's source to see it.
+  A repo-wide `.codespellrc` with `ignore-words-list = ...` is the fallback,
+  and a worse one: it stops that typo being caught *everywhere*, which for a
+  real typo is the opposite of what you want.
+- **Check more than markdown** → drop the `types: [markdown]` override on both
+  hooks. Markdown is the conservative default for a template, being the one
+  file type every repo created from this one is certain to have; a real project
+  will want its source, YAML comments and scripts swept too.
+- **British spelling** → `"language"` in [`cspell.json`](cspell.json) is `en`
+  (en-US), so `behaviour` and `standardise` are flagged — that is how the one
+  stray `Standardising` in this README was caught when the hooks were added.
+  Set it to `en-GB` to switch, or `"en,en-GB"` to accept both. Switching is
+  partial by nature: `en-GB` rejects `behavior`, but still accepts
+  `standardized`, because `-ize` is valid British spelling and `-ise` is a
+  style preference no dictionary can adjudicate.
 
 ## CI/CD integration
 
@@ -171,7 +222,7 @@ the *resolved* dependency graph, and that graph only exists inside an ecosystem'
 resolver — NuGet's `project.assets.json`, a `package-lock.json`, a populated
 virtualenv. A repo-level tool either shells out to those resolvers anyway or
 parses manifests and guesses, and guessing gets transitive and
-conditionally-referenced packages wrong. Standardising a generator here would also
+conditionally-referenced packages wrong. Standardizing a generator here would also
 mean forcing its toolchain onto every project made from this template, which is
 exactly what the [Requirements](#requirements) list above exists to avoid.
 
@@ -237,6 +288,10 @@ Everything else — the actual checks — is shared via `make ci`.
   regardless of what is installed globally.
 - Hook versions are pinned via `rev` in
   [`.pre-commit-config.yaml`](.pre-commit-config.yaml).
+- The cspell hook additionally pins its `language_version` (the Node runtime
+  pre-commit builds for it). Without that pin pre-commit uses whatever `node`
+  is on `PATH`, so the spell checker would run on a different runtime per
+  machine — the same failure the `.venv` indirection avoids for Python.
 - Both CI stubs pin the interpreter used to build `.venv` (currently 3.14) for
   reproducible runs. Any `>= 3.10` works; the pin is not a hook requirement.
 - Both stubs pin the runner/agent image (currently `ubuntu-24.04`) instead of
