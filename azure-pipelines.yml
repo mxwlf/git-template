@@ -1,38 +1,19 @@
-# ---------------------------------------------------------------------------
-# Azure DevOps Pipeline — THIN WRAPPER
-# ---------------------------------------------------------------------------
-# This pipeline deliberately contains no build logic. It only:
-#   1. checks out the code,
-#   2. provides a Python interpreter,
-#   3. runs `make ci`.
-#
-# `make ci` builds the repo-local virtualenv (.venv/) from that interpreter and
-# installs the pinned `pre-commit` from requirements-dev.txt into it, exactly as
-# a developer's `make setup` does — so there is nothing to install globally here.
-#
-# All actual checks live in the Makefile (`make ci`) and run identically on a
-# developer laptop and in GitHub Actions (.github/workflows/ci.yml). To change
-# WHAT runs in CI, edit the Makefile and .pre-commit-config.yaml — not this
-# file. The only things that belong here are platform-specific concerns that
-# cannot live in a portable script: triggers, the agent image, and
-# prerequisite installation.
-#
-# Determinism: tool versions are pinned (Python below; `pre-commit` in
-# requirements-dev.txt; hook versions via `rev` in .pre-commit-config.yaml).
-# Bump them deliberately.
+# Azure DevOps wrapper: provision Python and run the Makefile's PR or
+# post-integration acceptance entry point. Project-specific build and release
+# operations remain in the repository and its derived templates.
 
-# Trunk-based: `main` is the only long-lived branch. The `pr` trigger is the
-# gate and fires for a pull request from any source branch. `trigger` covers
-# `main` only, deliberately: adding feature branches would run the same commits
-# twice for no extra signal.
+# Pull requests are validated for either protected branch. Pushes to develop
+# run acceptance on the resulting commit. For Azure Repos, configure PR build
+# validation through branch policies; YAML `pr` triggers are provider-dependent.
 trigger:
   branches:
     include:
-      - main
+      - develop
 
 pr:
   branches:
     include:
+      - develop
       - main
 
 pool:
@@ -56,6 +37,11 @@ steps:
       key: 'pre-commit | "$(Agent.OS)" | .pre-commit-config.yaml'
       path: $(HOME)/.cache/pre-commit
 
-  # The single entrypoint. Everything CI does is defined in the Makefile.
+  # PR checks and post-integration acceptance remain independently extensible.
   - script: make ci
-    displayName: make ci
+    displayName: Pull request checks
+    condition: eq(variables['Build.Reason'], 'PullRequest')
+
+  - script: make acceptance
+    displayName: Post-integration acceptance
+    condition: ne(variables['Build.Reason'], 'PullRequest')

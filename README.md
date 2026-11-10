@@ -160,35 +160,23 @@ Three knobs, in the order you are likely to reach for them:
 
 ## CI/CD integration
 
-This template is designed so that wiring it into **any** CI/CD platform is
-simple and deterministic. It follows the industry-standard *thin wrapper*
-pattern (see [Martin Fowler on Continuous
-Integration](https://martinfowler.com/articles/continuousIntegration.html#AutomateTheBuild)):
-all the actual check logic lives **in the repository** behind a single command,
-and each CI platform's config does nothing more than check out the code,
-provide a Python interpreter, and run that one command.
+Pull requests into `develop` run `make ci`. Every push to `develop`, including
+an integration merge, runs `make acceptance` against that commit. Acceptance
+initially runs the same checks and is a separate extension point for a broader
+suite as a project grows. PRs into `main` also run `ci` because the shipped
+ruleset requires it.
 
-```
-make ci                       ← single source of truth (runs locally too)
-  └── .venv/ (built from requirements-dev.txt)
-        └── pre-commit run --all-files
-              └── hooks in .pre-commit-config.yaml
-
-.github/workflows/ci.yml      ← thin stub: checkout → python → `make ci`
-azure-pipelines.yml           ← thin stub: checkout → python → `make ci`
-```
-
-The same `make ci` a developer runs on their laptop is exactly what runs on
-GitHub Actions and Azure DevOps — including building the venv, so the CI stubs
-install nothing themselves. To change *what* CI does, edit the
-[`Makefile`](Makefile) and [`.pre-commit-config.yaml`](.pre-commit-config.yaml)
-— **not** the platform YAML.
+The portable checks live in the Makefile; the GitHub Actions and Azure DevOps
+configurations provide the environment and select the entry point. See the
+[integration and release baseline](docs/integration-release.md) for the complete
+intended lifecycle and what this foundation does and does not implement.
 
 | File | Purpose |
 | --- | --- |
-| [`Makefile`](Makefile) (`make ci`) | The portable entrypoint. All check logic lives here. Extend it with your project's build/test commands. |
-| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Thin GitHub Actions stub that runs `make ci`. |
-| [`azure-pipelines.yml`](azure-pipelines.yml) | Thin Azure DevOps stub that runs `make ci`. |
+| [`Makefile`](Makefile) | Defines `make ci` and `make acceptance`. |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Runs PR validation. |
+| [`.github/workflows/acceptance.yml`](.github/workflows/acceptance.yml) | Runs acceptance on each `develop` push. |
+| [`azure-pipelines.yml`](azure-pipelines.yml) | Selects the equivalent entry point on Azure DevOps. |
 
 ### Extending `make ci` for your project
 
@@ -204,6 +192,9 @@ test: ## Run the test suite
 
 Because the logic is in the Makefile, those steps run identically locally and
 on every CI platform — no YAML changes required.
+
+Extend `acceptance` with additional post-integration checks; its default
+dependency on `ci` keeps the PR checks in the broader suite.
 
 #### The `sbom` convention
 
@@ -258,39 +249,20 @@ deployment are specific to the project. A checksum detects changes relative to
 its manifest; it does not authenticate the manifest. Protect or attest the
 release artifact before relying on it for promotion.
 
-### What you still configure per platform (and why)
+### What you still configure per platform
 
-The thin-wrapper pattern minimizes platform-specific config but cannot
-eliminate it. Each platform requires its own small YAML stub, and a few
-concerns are inherently platform-specific and **cannot** be pushed into a
-portable script:
+The GitHub and Azure wrappers install prerequisites and select the entry point;
+projects must add their own toolchains, artifact storage, security settings,
+and release or deployment integrations. GitHub runs `ci` for PRs targeting
+`develop` or `main`, and acceptance on pushes to `develop`. Azure Repos needs a
+branch-policy build validation for pull requests; YAML `pr` triggers are
+provider-dependent.
 
-- **The stub file itself** — GitHub needs `.github/workflows/*.yml`; Azure
-  DevOps needs `azure-pipelines.yml`. The template ships both, pre-wired to
-  `make ci`.
-- **Triggers** (which branches/events run CI) — expressed differently on each
-  platform. Both stubs ship pre-configured to run CI on:
-  - **pushes** to `main`, and
-  - **pull requests** targeting `main`, from any source branch.
-
-  Feature branches are intentionally absent from the push trigger: a branch that
-  has an open pull request would otherwise build the same commits twice for no
-  extra signal.
-
-  The pull-request trigger must cover every branch you gate with a required
-  status check (see [Branch protection](#branch-protection-github-rulesets)).
-  A required check that never runs is never reported, and the pull request
-  waits on it forever.
-
-  Adjust the `on`/`trigger`/`pr` sections in
-  [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and
-  [`azure-pipelines.yml`](azure-pipelines.yml) to change this.
-- **Secrets, service connections, OIDC, and permissions** — managed in each
-  platform's settings/YAML, never in the repo.
-- **Runner/agent image** and **which Python interpreter is on the agent** (the
-  base for `.venv`).
-
-Everything else — the actual checks — is shared via `make ci`.
+The job name `ci` is required by the shipped rulesets. If you change the name
+or the protected branches, update the triggers and rulesets together. The
+acceptance run is a post-merge result, not a PR-required check and not yet a
+release gate. A release implementation must explicitly require the result for
+the exact candidate commit.
 
 ### Determinism
 
@@ -314,9 +286,15 @@ Everything else — the actual checks — is shared via `make ci`.
 
 Bump these versions deliberately when you want to upgrade.
 
+## Security and dependency alignment
+
+The [security baseline](docs/security-baseline.md) compares the shared hooks
+with the homepage's additional checks and records proposed policies. It
+identifies which capabilities are implemented and which still need alignment.
+
 ## Branch protection (GitHub rulesets)
 
-CI that merely *reports* a failure does not keep a broken commit off `main`.
+CI that merely *reports* a failure does not keep a broken commit off `develop`.
 A commit cannot be rejected because CI failed — CI only starts once the commit
 exists. What actually protects a branch is a rule that refuses the merge until
 a check has already passed, which lives on the GitHub side, not in a git hook.
@@ -344,56 +322,23 @@ the shipped rulesets enforce.
 
 ### The workflow these rules require
 
-The workflow is **trunk-based**. `main` is the only long-lived branch: there is
-no `develop` to stage through, and no release branches. Everything else is a
-short-lived branch that exists just long enough to carry one pull request, and
-is deleted after it merges.
+Create `develop`, branch from it, and propose changes through a PR back to
+`develop`. Its ruleset requires `ci`, an up-to-date branch and one review;
+repository admins can bypass those requirements within a PR. When a PR merges,
+the resulting push starts acceptance. The default acceptance suite runs the
+same checks as the PR suite, and projects can extend it.
 
-With `main-protection` active, `main` cannot be written to directly. Every
-change reaches it the same way:
+`main` is intended to record the successfully promoted source commit. This
+foundation has no release or promotion automation. Its `main` ruleset blocks
+direct updates, including from automation without an explicit bypass; do not
+assume it is ready to record a deployment. The [integration and release
+baseline](docs/integration-release.md) covers the planned gates, account-specific
+authority, and rollback limitation.
 
-1. **Branch off `main`.** Name it however you like — the rules place no
-   constraint on source branches, and a feature branch needs no protection of
-   its own, since it cannot reach `main` except through the gate below. Keep it
-   short-lived; the point of trunk-based work is that branches merge in days,
-   not weeks. Commits are checked locally by the hooks from `make setup`.
-2. **Open a pull request into `main`.** A direct `git push origin main` is
-   rejected by the ruleset, as is a force-push and a branch deletion.
-3. **Let `ci` finish and pass.** It is a required check, so the merge button
-   stays disabled until it reports success. The branch must also be up to date
-   with `main` first (`strict_required_status_checks_policy`), so if `main`
-   moved, update the branch and let `ci` run again.
-4. **Merge with a merge commit, then delete the branch.** `main` accepts *only*
-   merge commits — squash and rebase are not offered. That choice is about
-   authorship: a merge commit leaves your commits untouched, so each keeps the
-   signature you made, and GitHub signs the merge commit itself to satisfy
-   `required_signatures`. The trade is that `main` is not linear.
-
-   **Rebase merges are not allowed, and cannot be.** A rebase merge rewrites
-   each commit into a new object, which discards the author's signature, and
-   GitHub has no key with which to re-sign on the author's behalf. Enabling
-   `rebase` alongside `required_signatures` produces a merge button that always
-   fails with *"Base branch requires signed commits. Rebase merges cannot be
-   automatically signed by GitHub."* A squash merge does work, but it collapses
-   the branch into one new GitHub-signed commit, so your own signatures do not
-   survive onto `main`.
-
-What this buys you, and what it does not: the rules keep a red build from
-reaching `main` by accident. They are not a hard stop, because the shipped
-`main-protection` lets a repository admin bypass them *inside a pull request*
-(`bypass_mode: "pull_request"`) — which is also what makes the required approval
-satisfiable on a one-maintainer repo, since you cannot approve your own pull
-request. Drop the `bypass_actors` entry to make the check absolute, and drop
-`required_approving_review_count` to 0 at the same time or nothing will ever
-merge.
-
-> **Keep the check name and the trigger in sync.** The required check is the
-> `ci` **job id** in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), and
-> that workflow's `pull_request` trigger must list every branch the rulesets
-> protect. Rename the job, or protect a new branch without extending the
-> trigger, and the required check is simply never reported — the pull request
-> then waits on it indefinitely rather than failing. Both files have to change
-> together.
+A required check must run for every PR to a protected branch. Both shipped
+rulesets require the `ci` job from [`.github/workflows/ci.yml`](.github/workflows/ci.yml),
+which includes `develop` and `main` in its trigger. Create `develop` and confirm
+the checks report before applying the rulesets.
 
 ## Make targets
 
@@ -402,7 +347,9 @@ merge.
 | `make help` | Show available targets (default when running `make`). |
 | `make setup` | Create `.venv`, then configure the repo to use the shared git config and pre-commit hooks. |
 | `make venv` | Create/update `.venv` from `requirements-dev.txt` (no-op when up to date). |
-| `make ci` | Run the full CI check suite — the single command CI/CD pipelines invoke. Runs identically locally. |
+| `make ci` | Run the pull-request checks locally or in CI. |
+| `make acceptance` | Run post-integration acceptance; extends `ci` by default. |
+| `make candidate`, `make candidate-acceptance`, `make release`, `make publish`, `make record-release` | Reserved release phases; fail until implemented for a project. |
 | `make lint` | Run all pre-commit hooks against all files. |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |
