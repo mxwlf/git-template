@@ -46,7 +46,7 @@ the version references with full commit hashes and verify the fallback before
 applying policy.
 
 The `actions-lock` and `gitleaks` jobs run on all protected pull requests.
-After confirming they report, require them in the live rulesets. Dependency
+The committed rulesets require them; confirm they report before applying those rulesets. Dependency
 review fails on newly introduced high and critical findings; it requires the
 dependency graph and may not be available for private repositories. For private
 repositories, enable it only after validating availability by setting the

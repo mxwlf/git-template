@@ -51,6 +51,14 @@
           {
             "context": "ci",
             "integration_id": 15368
+          },
+          {
+            "context": "actions-lock",
+            "integration_id": 15368
+          },
+          {
+            "context": "gitleaks",
+            "integration_id": 15368
           }
         ],
         "strict_required_status_checks_policy": true
