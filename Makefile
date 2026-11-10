@@ -7,7 +7,8 @@
 #   make            # same as `make help`
 #   make help       # list available targets
 #   make setup      # create .venv + configure the repo's git config and hooks
-#   make ci         # run the full CI check suite (the command pipelines invoke)
+#   make ci         # run the pull-request checks
+#   make acceptance # run post-integration acceptance checks
 #   make lint       # run all pre-commit hooks against all files
 #   make clean      # remove the local virtualenv
 #
@@ -63,7 +64,7 @@ VENV_STAMP := $(VENV)/.requirements-installed
 
 RULESETS := ./scripts/github-rulesets.sh
 
-.PHONY: setup venv ci lint clean check-python help \
+.PHONY: setup venv ci acceptance lint clean check-python help \
         rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
@@ -83,17 +84,15 @@ $(VENV_STAMP): requirements-dev.txt
 	@touch $@
 
 # ---------------------------------------------------------------------------
-# CI ENTRYPOINT
+# CI AND ACCEPTANCE ENTRYPOINTS
 # ---------------------------------------------------------------------------
-# `make ci` is the SINGLE command CI/CD pipelines invoke. Both the GitHub
-# Actions workflow (.github/workflows/ci.yml) and the Azure DevOps pipeline
-# (azure-pipelines.yml) do nothing more than: check out the code, provide a
-# Python interpreter, and run `make ci`. All actual logic lives here, in-repo,
-# so it runs identically on a developer laptop and on every CI platform.
-#
-# Projects built from this template extend `ci` by adding their own build/test
-# steps (e.g. `dotnet test`, `npm test`) as dependencies or extra recipe lines.
-ci: lint ## Run the full CI check suite (what pipelines invoke)
+# PRs run `make ci`; each push to develop runs `make acceptance` for that
+# commit. Acceptance starts with the same checks and is a separate extension
+# point for slower integration tests. Successful acceptance alone does not
+# publish a release or verify a release candidate.
+ci: lint ## Run the pull-request check suite
+
+acceptance: ci ## Run post-integration acceptance checks (extends ci by default)
 
 lint: venv ## Run all pre-commit hooks against all files (same hooks as the git hooks)
 	$(PRE_COMMIT) run --all-files --show-diff-on-failure

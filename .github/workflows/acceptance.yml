@@ -1,0 +1,25 @@
+# The post-integration gate runs on the actual commit pushed to develop.
+# Each push gets its own run; do not cancel earlier runs because a release
+# candidate must be tied to the acceptance result for its exact source commit.
+name: acceptance
+
+on:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - run: make acceptance
