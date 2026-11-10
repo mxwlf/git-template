@@ -213,9 +213,9 @@ deliberately ships no generator:
 
 | Portable — keep this shape in every project | Project-specific |
 | --- | --- |
-| A `sbom` target, in the `ci` chain, after whatever builds | The generator and its toolchain |
+| An `sbom` target after the relevant build, when a project ships an artifact | The generator and its toolchain |
 | Output under the same gitignored artifacts directory the other reports use | The dependency-manifest path it reads |
-| Published by the CI stubs alongside the test and coverage reports | The SBOM's subject name and version |
+| Keep the release SBOM with its artifact and evidence | The SBOM's subject name and version |
 
 Nothing portable can generate the document itself, because an SBOM's substance is
 the *resolved* dependency graph, and that graph only exists inside an ecosystem's
@@ -232,8 +232,9 @@ toolchain nobody deploys — so an SBOM of it would inventory something that is
 never shipped.
 
 [`dotnet-template`](https://github.com/mxwlf/dotnet-template) implements this
-contract for .NET, with Microsoft's `sbom-tool` producing SPDX 2.2 from
-`project.assets.json`, if you want a worked example.
+contract for an example .NET package, with Microsoft's `sbom-tool` producing
+SPDX 2.2 from `project.assets.json`. A specialized project chooses its own
+SBOM scope and whether to generate one in each CI run or at release time.
 
 Two decisions worth making deliberately when you do implement it:
 
@@ -244,8 +245,18 @@ Two decisions worth making deliberately when you do implement it:
   first is a drift detector — it catches a dependency added without its lockfile
   updated. The authoritative one describes a released artifact and should be
   attached to the release and attested (for example with `actions/attest-sbom`).
-  Putting `sbom` in `ci` gets you the first; the second belongs to a release
+  A project may generate the first in `ci`; the second belongs to a release
   workflow.
+
+#### Release foundations
+
+The general Git template ships no product and does not publish a release. A
+project that does ship should build and validate its release candidate, keep its
+artifact and evidence together, and promote the same verified artifact to its
+destination. The artifact format, SBOM, signing, publishing credentials, and
+deployment are specific to the project. A checksum detects changes relative to
+its manifest; it does not authenticate the manifest. Protect or attest the
+release artifact before relying on it for promotion.
 
 ### What you still configure per platform (and why)
 
