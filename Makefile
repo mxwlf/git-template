@@ -90,7 +90,13 @@ $(VENV_STAMP): requirements-dev.txt
 # commit. Acceptance starts with the same checks and is a separate extension
 # point for slower integration tests. Successful acceptance alone does not
 # publish a release or verify a release candidate.
-ci: lint ## Run the pull-request check suite
+ci: security-exceptions-check lint ## Run the pull-request check suite
+
+# Validate exception metadata even when dependency review is unavailable.
+.PHONY: security-exceptions-check
+security-exceptions-check: check-python ## Reject invalid or expired dependency exceptions
+	@$(PYTHON) scripts/security_exceptions.py > /dev/null
+	@$(PYTHON) -m unittest discover -s tests -p test_security_exceptions.py
 
 acceptance: ci ## Run post-integration acceptance checks (extends ci by default)
 

@@ -391,3 +391,5 @@ configuration, the CI stubs, the rulesets and this documentation. A repository
 created from the template inherits those files under the same terms, and MIT lets
 you relicense your own work on top of them however you like. Replace the copyright
 holder in `LICENSE` with your own when you do.
+
+Security onboarding and exception handling are documented in [the security baseline](docs/security-baseline.md).
