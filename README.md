@@ -349,6 +349,7 @@ the checks report before applying the rulesets.
 | `make venv` | Create/update `.venv` from `requirements-dev.txt` (no-op when up to date). |
 | `make ci` | Run the pull-request checks locally or in CI. |
 | `make acceptance` | Run post-integration acceptance; extends `ci` by default. |
+| `make candidate`, `make candidate-acceptance`, `make release`, `make publish`, `make record-release` | Reserved release phases; fail until implemented for a project. |
 | `make lint` | Run all pre-commit hooks against all files. |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |

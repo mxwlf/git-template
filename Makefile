@@ -64,7 +64,7 @@ VENV_STAMP := $(VENV)/.requirements-installed
 
 RULESETS := ./scripts/github-rulesets.sh
 
-.PHONY: setup venv ci acceptance lint clean check-python help \
+.PHONY: setup venv ci acceptance candidate candidate-acceptance release publish record-release lint clean check-python help \
         rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
@@ -93,6 +93,25 @@ $(VENV_STAMP): requirements-dev.txt
 ci: lint ## Run the pull-request check suite
 
 acceptance: ci ## Run post-integration acceptance checks (extends ci by default)
+
+# Reserved release phases are deliberately not successful no-ops. A downstream
+# project replaces each recipe and connects the gates for its own artifact.
+# None depends on another by default: invoking one must not accidentally run
+# a partial release or publish. See docs/integration-release.md.
+candidate: ## Reserved: build a versioned immutable candidate
+	@echo 'candidate: not implemented for this repository' >&2; exit 2
+
+candidate-acceptance: ## Reserved: test and record the exact candidate
+	@echo 'candidate-acceptance: not implemented for this repository' >&2; exit 2
+
+release: ## Reserved: create a release from an accepted candidate
+	@echo 'release: not implemented for this repository' >&2; exit 2
+
+publish: ## Reserved: promote a verified release to its destination
+	@echo 'publish: not implemented for this repository' >&2; exit 2
+
+record-release: ## Reserved: record the successfully promoted source on main
+	@echo 'record-release: not implemented for this repository' >&2; exit 2
 
 lint: venv ## Run all pre-commit hooks against all files (same hooks as the git hooks)
 	$(PRE_COMMIT) run --all-files --show-diff-on-failure
