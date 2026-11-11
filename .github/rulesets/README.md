@@ -81,6 +81,20 @@ actually runs on a pull request.
 a path or branch filter, its checks stay pending forever rather than passing.
 Either way, a required check is only worth anything if it genuinely runs.)
 
+## Roll out changes to `main`
+
+Preview the change before applying it. Check that the named required jobs
+report on a pull request targeting `main` before enforcing new requirements.
+
+```sh
+make rulesets-diff RULESET=main-protection
+make rulesets-apply RULESET=main-protection
+make rulesets-diff RULESET=main-protection
+```
+
+The committed `main-protection` ruleset requires `ci`, `actions-lock`, and
+`gitleaks`. Applying it updates those requirements on `main`.
+
 ## What is portable between repositories
 
 These files are meant to be copied into repos created from this template, so
