@@ -5,16 +5,16 @@ My baseline git template. It ships a shared git configuration and a set of
 template gets consistent commit hygiene and commit-message formatting out of
 the box.
 
-All tooling lives in a **repo-local virtualenv** (`.venv/`) created by
+The installed hook tooling lives in a **repo-local virtualenv** (`.venv/`) created by
 `make setup`. Nothing is installed globally, and no specific global Python
 version is required.
 
 ## Requirements
 
 - **GNU make**, **git**, and a POSIX shell (on Windows: Git Bash or WSL).
-- **Any Python interpreter `>= 3.10`** reachable as `python3`. It is used *only*
-  to create `.venv/`, so whatever you already have works — system, Homebrew,
-  pyenv, uv, asdf. If your default `python3` is older, point make at another
+- **Any Python interpreter `>= 3.10`** reachable as `python3`. It runs the branch
+  reconciliation script and creates `.venv/`. You can use the system Python or
+  an installation from Homebrew, pyenv, uv, or asdf. If your default `python3` is older, point make at another
   interpreter instead of changing your system default:
 
   ```sh
@@ -50,22 +50,26 @@ Node installed, and regardless of which version you have.
 
 ## Setup
 
-From the repository root:
+Clone the repository GitHub generated from the template. From the clone's root,
+run setup before making commits or applying branch protection.
 
 ```sh
 make setup
 ```
 
-This does three things:
+Setup runs these steps in order.
 
-1. Creates `.venv/` and installs the pinned tooling
+1. Runs `make reconcile-branches` to establish a common history for `main`
+   and `develop` on `origin`. See [branch reconciliation](docs/branch-reconciliation.md)
+   for how it handles both GitHub template options and checks for existing work.
+2. Creates `.venv/` and installs the pinned tooling
    ([`requirements-dev.txt`](requirements-dev.txt)) into it.
-2. Runs `git config --local include.path ../.gitconfig`, which makes the repo's
+3. Runs `git config --local include.path ../.gitconfig`, which makes the repo's
    local config include the committed [`.gitconfig`](.gitconfig). That config
    sets `core.hooksPath = .githooks/`, activating the committed hook scripts.
    Because the hooks live in `.githooks/` and are wired up through
    `include.path`, **`pre-commit install` is not required**.
-3. Runs `pre-commit install-hooks` to pre-build the hook environments, so your
+4. Runs `pre-commit install-hooks` to pre-build the hook environments, so your
    first commit isn't slowed down by it.
 
 You never need to *activate* `.venv`: the hook scripts in `.githooks/` and every
@@ -322,8 +326,8 @@ the shipped rulesets enforce.
 
 ### The workflow these rules require
 
-Create `develop`, branch from it, and propose changes through a PR back to
-`develop`. Its ruleset requires `ci`, an up-to-date branch and one review;
+After setup creates the branch pair, branch from `develop` and propose changes
+through a PR back to `develop`. Its ruleset requires `ci`, an up-to-date branch and one review;
 repository admins can bypass those requirements within a PR. When a PR merges,
 the resulting push starts acceptance. The default acceptance suite runs the
 same checks as the PR suite, and projects can extend it.
@@ -337,15 +341,17 @@ authority, and rollback limitation.
 
 A required check must run for every PR to a protected branch. Both shipped
 rulesets require the `ci` job from [`.github/workflows/ci.yml`](.github/workflows/ci.yml),
-which includes `develop` and `main` in its trigger. Create `develop` and confirm
-the checks report before applying the rulesets.
+which includes `develop` and `main` in its trigger. Run setup and confirm the
+checks report before applying the rulesets.
 
 ## Make targets
 
 | Target | Description |
 | --- | --- |
 | `make help` | Show available targets (default when running `make`). |
-| `make setup` | Create `.venv`, then configure the repo to use the shared git config and pre-commit hooks. |
+| `make setup` | Reconcile template branches, create `.venv`, and configure and install the Git hooks. |
+| `make reconcile-branches` | Run just the branch reconciliation and its preflight checks on `origin`. |
+| `make branch-reconciliation-test` | Run the reconciliation tests against temporary local Git repositories. |
 | `make venv` | Create/update `.venv` from `requirements-dev.txt` (no-op when up to date). |
 | `make ci` | Run the pull-request checks locally or in CI. |
 | `make acceptance` | Run post-integration acceptance; extends `ci` by default. |
