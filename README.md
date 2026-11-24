@@ -359,8 +359,8 @@ checks report before applying the rulesets.
 | `make lint` | Run all pre-commit hooks against all files. |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |
-| `make rulesets-apply` | Create/update this repo's GitHub rulesets from `.github/rulesets/`. Needs `gh`. |
-| `make rulesets-diff` | Report drift between `.github/rulesets/` and the live rulesets. Needs `gh`. |
+| `make rulesets-apply` | Create/update this repo's GitHub rulesets from `.github/rulesets/` and enable branch auto-delete. Needs `gh`. |
+| `make rulesets-diff` | Report drift between `.github/rulesets/` and the live rulesets and branch auto-delete. Needs `gh`. |
 | `make rulesets-export` | Overwrite `.github/rulesets/` with the live rulesets. Needs `gh`. |
 
 Override the interpreter for any of these with `PYTHON=...`, e.g.
