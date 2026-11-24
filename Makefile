@@ -6,11 +6,12 @@
 # Usage:
 #   make            # same as `make help`
 #   make help       # list available targets
-#   make setup      # reconcile branches, create .venv, and configure Git hooks
+#   make init       # reconcile branches, then run local setup
+#   make setup      # install tooling and configure local Git hooks
 #   make reconcile-branches  # reconcile main and develop on origin
 #   make ci         # run the pull-request checks
 #   make acceptance # run post-integration acceptance checks
-#   make lint       # run all pre-commit hooks against all files
+#   make lint       # run read-only repository hooks
 #   make clean      # remove the local virtualenv
 #
 #   make rulesets-apply    # rebuild this repo's GitHub branch protection
@@ -29,7 +30,7 @@
 #   installs the pinned `pre-commit` from requirements-dev.txt into it.
 #
 # How it works:
-#   `make setup` runs these steps:
+#   `make init` runs these steps:
 #     1. Reconciles origin/main and origin/develop in fresh template clones.
 #     2. Builds .venv/ and installs the pinned tooling into it.
 #     3. Runs `git config --local include.path ../.gitconfig`, which makes this
@@ -66,15 +67,17 @@ VENV_STAMP := $(VENV)/.requirements-installed
 
 RULESETS := ./scripts/github-rulesets.sh
 
-.PHONY: setup reconcile-branches branch-reconciliation-test \
-        venv ci acceptance candidate candidate-acceptance release publish record-release lint clean check-python help \
+.PHONY: init setup check clean-venv reconcile-branches branch-reconciliation-test \
+        venv ci pre-commit test acceptance candidate candidate-acceptance release publish record-release lint clean check-python help \
         rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-setup: reconcile-branches ## Reconcile template branches, install tooling, and configure Git hooks
-	@$(MAKE) --no-print-directory venv
+init: reconcile-branches ## Initialize template branches, then configure local development tools
+	@$(MAKE) --no-print-directory setup
+
+setup: venv ## Install development tooling and configure local Git hooks
 	git config --local include.path ../.gitconfig
 	$(PRE_COMMIT) install-hooks
 
@@ -100,7 +103,11 @@ $(VENV_STAMP): requirements-dev.txt
 # commit. Acceptance starts with the same checks and is a separate extension
 # point for slower integration tests. Successful acceptance alone does not
 # publish a release or verify a release candidate.
-ci: security-exceptions-check branch-reconciliation-test lint ## Run the pull-request check suite
+test: branch-reconciliation-test security-exceptions-check ## Run the template test suite
+
+check: test lint ## Run tests and read-only repository checks
+
+ci: test pre-commit ## Run the pull-request check suite
 
 # Validate exception metadata even when dependency review is unavailable.
 .PHONY: security-exceptions-check
@@ -129,10 +136,15 @@ publish: ## Reserved: promote a verified release to its destination
 record-release: ## Reserved: record the successfully promoted source on main
 	@echo 'record-release: not implemented for this repository' >&2; exit 2
 
-lint: venv ## Run all pre-commit hooks against all files (same hooks as the git hooks)
+lint: venv ## Run read-only repository hooks
+	SKIP=sync-pre-commit-deps,trailing-whitespace,end-of-file-fixer,fix-byte-order-marker,mixed-line-ending $(PRE_COMMIT) run --all-files --show-diff-on-failure
+
+pre-commit: venv ## Run all pre-commit hooks against all files (same hooks as the git hooks)
 	$(PRE_COMMIT) run --all-files --show-diff-on-failure
 
-clean: ## Remove the local virtualenv (rebuild it with `make setup`)
+clean: clean-venv ## Remove the local virtualenv (compatibility alias)
+
+clean-venv: ## Remove the local virtualenv (rebuild it with `make setup`)
 	rm -rf $(VENV)
 
 # ---------------------------------------------------------------------------

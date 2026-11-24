@@ -51,13 +51,14 @@ Node installed, and regardless of which version you have.
 ## Setup
 
 Clone the repository GitHub generated from the template. From the clone's root,
-run setup before making commits or applying branch protection.
+run initialization before making commits or applying branch protection.
 
 ```sh
-make setup
+make init
 ```
 
-Setup runs these steps in order.
+Use `make setup` in each subsequent worktree to install tooling and activate the hooks locally.
+On the first clone, `make init` runs these steps in order.
 
 1. Runs `make reconcile-branches` to establish a common history for `main`
    and `develop` on `origin`. See [branch reconciliation](docs/branch-reconciliation.md)
@@ -184,13 +185,15 @@ intended lifecycle and what this foundation does and does not implement.
 
 ### Extending `make ci` for your project
 
-Add your build/test steps to the `ci` target in the [`Makefile`](Makefile). For
+Extend the baseline verification targets in the [`Makefile`](Makefile). For
 example, for a .NET project:
 
 ```make
-ci: lint test ## Run the full CI check suite
+# Add a suite to the existing test target. Both check and ci already use test.
+.PHONY: test-dotnet
+test: test-dotnet
 
-test: ## Run the test suite
+test-dotnet: ## Run the .NET test suite
 	dotnet test
 ```
 
@@ -326,7 +329,7 @@ the shipped rulesets enforce.
 
 ### The workflow these rules require
 
-After setup creates the branch pair, branch from `develop` and propose changes
+After `make init` creates the branch pair, branch from `develop` and propose changes
 through a PR back to `develop`. Its ruleset requires `ci`, an up-to-date branch and one review;
 repository admins can bypass those requirements within a PR. When a PR merges,
 the resulting push starts acceptance. The default acceptance suite runs the
@@ -348,16 +351,20 @@ checks report before applying the rulesets.
 
 | Target | Description |
 | --- | --- |
-| `make help` | Show available targets (default when running `make`). |
-| `make setup` | Reconcile template branches, create `.venv`, and configure and install the Git hooks. |
+| `make help` | Show available targets. Bare `make` prints help because the Git baseline has no build artifact. |
+| `make init` | Reconcile template branches on the first clone, then run local setup. |
+| `make setup` | Create the virtual environment and configure and install the Git hooks. |
 | `make reconcile-branches` | Run just the branch reconciliation and its preflight checks on `origin`. |
 | `make branch-reconciliation-test` | Run the reconciliation tests against temporary local Git repositories. |
 | `make venv` | Create/update `.venv` from `requirements-dev.txt` (no-op when up to date). |
 | `make ci` | Run the pull-request checks locally or in CI. |
 | `make acceptance` | Run post-integration acceptance; extends `ci` by default. |
 | `make candidate`, `make candidate-acceptance`, `make release`, `make publish`, `make record-release` | Reserved release phases; fail until implemented for a project. |
-| `make lint` | Run all pre-commit hooks against all files. |
-| `make clean` | Remove `.venv` (rebuild with `make setup`). |
+| `make lint` | Run the read-only repository hooks against tracked files. |
+| `make pre-commit` | Run the full hook suite, including automatic fixes. |
+| `make test` | Run the branch reconciliation and security exception tests. |
+| `make check` | Run the tests and read-only hooks. |
+| `make clean-venv`, `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |
 | `make rulesets-apply` | Create/update this repo's GitHub rulesets from `.github/rulesets/` and enable branch auto-delete. Needs `gh`. |
 | `make rulesets-diff` | Report drift between `.github/rulesets/` and the live rulesets and branch auto-delete. Needs `gh`. |
